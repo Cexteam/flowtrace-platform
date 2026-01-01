@@ -1,0 +1,78 @@
+{
+  "name": "@flowtrace/core",
+  "version": "1.0.0",
+  "description": "FlowTrace core business logic - features and shared utilities",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./features/*": {
+      "types": "./dist/features/*/index.d.ts",
+      "import": "./dist/features/*/index.js",
+      "require": "./dist/features/*/index.js"
+    },
+    "./shared/*": {
+      "types": "./dist/shared/*/index.d.ts",
+      "import": "./dist/shared/*/index.js",
+      "require": "./dist/shared/*/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc && pnpm copy:assets",
+    "build:clean": "rm -rf dist && tsc && pnpm copy:assets",
+    "copy:assets": "cp -r src/shared/infrastructure/database/migrations/sqlite/*.sql dist/shared/infrastructure/database/migrations/sqlite/ 2>/dev/null || true",
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@flowtrace/ipc": "workspace:*",
+    "@t3-oss/env-core": "^0.9.2",
+    "axios": "^1.13.2",
+    "better-sqlite3": "^11.6.0",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.36.4",
+    "inversify": "^6.0.2",
+    "lodash": "^4.17.21",
+    "node-cron": "^3.0.3",
+    "reflect-metadata": "^0.2.2",
+    "uuid": "^13.0.0",
+    "winston": "^3.15.0",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@jest/globals": "^30.2.0",
+    "@types/jest": "^29.5.14",
+    "@types/lodash": "^4.17.21",
+    "@types/node": "^22.10.1",
+    "@types/node-cron": "^3.0.11",
+    "@types/ws": "^8.5.13",
+    "fast-check": "^4.3.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.5",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "reflect-metadata": "^0.2.2"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "keywords": [
+    "flowtrace",
+    "trading",
+    "candle-processing",
+    "market-data",
+    "order-flow"
+  ],
+  "license": "ISC"
+}

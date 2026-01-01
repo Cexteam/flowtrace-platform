@@ -1,0 +1,67 @@
+namespace FlowTrace.FlatBuffers;
+
+table Aggs {
+  tp: double;      // tick price
+  v: double;       // volume
+  bv: double;      // buy volume
+  sv: double;      // sell volume
+  bq: double;      // buy quote
+  sq: double;      // sell quote
+}
+
+table Candle {
+  // Identifiers
+  e: string;       // event type
+  tz: string;      // timezone
+  ex: string;      // exchange
+  a: string;       // asset
+  s: string;       // symbol
+  s1: string;      // symbol alternate
+  s2: string;      // symbol alternate 2
+  i: string;       // interval
+  
+  // Time fields
+  id: int64;       // id
+  vi: int64;       // interval in seconds
+  t: int64;        // open timestamp
+  ct: int64;       // close timestamp
+  df: int64;       // diff
+  
+  // OHLCV
+  o: double;       // open
+  h: double;       // high
+  l: double;       // low
+  c: double;       // close
+  v: double;       // volume
+  
+  // Buy/Sell volumes
+  bv: double;      // buy volume
+  sv: double;      // sell volume
+  
+  // Quote volumes
+  q: double;       // quote volume
+  bq: double;      // buy quote volume
+  sq: double;      // sell quote volume
+  
+  // Delta
+  d: double;       // delta
+  dMax: double;    // delta max
+  dMin: double;    // delta min
+  
+  // Other fields
+  n: int64;        // trade count
+  tv: double;      // tick value
+  f: double;       // first trade id
+  ls: double;      // last price
+  x: bool;         // is closed
+  
+  // Footprint data
+  aggs: [Aggs];    // aggregated footprint data
+}
+
+table CandleBatch {
+  candles: [Candle];
+  count: int32;
+}
+
+root_type Candle;

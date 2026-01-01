@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2024"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+    "noUncheckedIndexedAccess": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "composite": true,
+    "incremental": true,
+    "baseUrl": ".",
+    "paths": {
+      "@flowtrace/ipc": ["packages/ipc/src"],
+      "@flowtrace/ipc/*": ["packages/ipc/src/*"],
+      "@flowtrace/core": ["packages/core/src"],
+      "@flowtrace/core/*": ["packages/core/src/*"],
+      "@flowtrace/api": ["packages/api/src"],
+      "@flowtrace/api/*": ["packages/api/src/*"],
+      "@flowtrace/ui": ["packages/ui/src"],
+      "@flowtrace/ui/*": ["packages/ui/src/*"]
+    }
+  },
+  "exclude": ["node_modules", "dist", ".turbo"]
+}

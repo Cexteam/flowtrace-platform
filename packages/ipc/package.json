@@ -1,0 +1,49 @@
+{
+  "name": "@flowtrace/ipc",
+  "version": "1.0.0",
+  "description": "FlowTrace IPC infrastructure - Unix Socket and RuntimeDatabase",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:clean": "rm -rf dist && tsc",
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.6.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@jest/globals": "^30.2.0",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^24.0.0",
+    "fast-check": "^4.3.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.5",
+    "typescript": "^5.9.3"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "keywords": [
+    "flowtrace",
+    "ipc",
+    "unix-socket",
+    "runtime-database",
+    "message-queue",
+    "state-persistence"
+  ],
+  "license": "ISC"
+}

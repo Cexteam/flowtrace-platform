@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+
+# Turbo
+.turbo/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test coverage
+coverage/
+
+# TypeScript
+*.tsbuildinfo
+
+# Temporary files
+tmp/
+temp/
+
+# Kiro
+.kiro/
+
+# Tests
+**/tests/
+**/__tests__/
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+*.property.test.ts
+jest.config.*
+vitest.config.*
+.env.test
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Scripts (development utilities)
+scripts/
+
+# Desktop UI symlink (points to packages/ui/out)
+apps/desktop/ui

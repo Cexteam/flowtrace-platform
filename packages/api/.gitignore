@@ -1,0 +1,15 @@
+# Build output
+dist/
+*.js
+*.js.map
+*.d.ts
+*.d.ts.map
+
+# Keep source files
+!src/**/*.ts
+
+# Dependencies
+node_modules/
+
+# Turbo
+.turbo/

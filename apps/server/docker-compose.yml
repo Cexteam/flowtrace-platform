@@ -1,0 +1,119 @@
+# FlowTrace Server - Docker Compose Configuration
+# @requirements 9.3 - Docker-compatible deployment with Redis and PostgreSQL
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # FlowTrace Server Application
+  # ============================================================================
+  server:
+    build:
+      context: ../..
+      dockerfile: apps/server/Dockerfile
+    container_name: flowtrace-server
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3001}:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - HOST=0.0.0.0
+      # PostgreSQL
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-flowtrace}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-flowtrace_secret}
+      - POSTGRES_DB=${POSTGRES_DB:-flowtrace}
+      - POSTGRES_POOL_MAX=20
+      # Redis
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      # Storage
+      - STORAGE_PATH=/app/data/ticks
+      - STORAGE_INDEX_INTERVAL=60000
+      # CORS
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
+    volumes:
+      - tick-data:/app/data/ticks
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - flowtrace-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
+  # PostgreSQL Database
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: flowtrace-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-flowtrace}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-flowtrace_secret}
+      - POSTGRES_DB=${POSTGRES_DB:-flowtrace}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    networks:
+      - flowtrace-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-flowtrace} -d ${POSTGRES_DB:-flowtrace}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ============================================================================
+  # Redis Cache
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: flowtrace-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - flowtrace-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  flowtrace-network:
+    driver: bridge
+
+# ============================================================================
+# Volumes
+# ============================================================================
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  tick-data:
+    driver: local

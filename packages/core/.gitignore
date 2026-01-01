@@ -1,0 +1,38 @@
+# Build outputs
+dist/
+*.tsbuildinfo
+
+# Compiled files in src (should only be in dist)
+src/**/*.js
+src/**/*.d.ts
+src/**/*.js.map
+src/**/*.d.ts.map
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Node modules (handled by root .gitignore but added for clarity)
+node_modules/
+
+# Flowtrace data
+.flowtrace/
