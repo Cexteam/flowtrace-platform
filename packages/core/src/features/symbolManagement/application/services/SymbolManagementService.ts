@@ -11,7 +11,6 @@ import { createLogger } from '../../../../shared/lib/logger/logger.js';
 import {
   SymbolManagementPort,
   type SyncResult,
-  type ScheduleStatus,
 } from '../ports/in/SymbolManagementPort.js';
 import { SyncSymbolsFromExchangeUseCase } from '../use-cases/SyncSymbolsFromExchange/index.js';
 import { ActivateSymbolUseCase } from '../use-cases/ActivateSymbol/index.js';
@@ -433,18 +432,5 @@ export class SymbolManagementService implements SymbolManagementPort {
       logger.error('❌ Symbol sync crashed:', error);
       throw error;
     }
-  }
-
-  /**
-   * Get current schedule status
-   * Returns information about the scheduled synchronization
-   */
-  getScheduleStatus(): ScheduleStatus {
-    const status = this.cronScheduler.getTaskStatus('symbol-sync-all');
-    return {
-      isActive: status.isActive,
-      schedule: '0 * * * * (every hour)',
-      lastRun: status.nextRun, // Approximate - node-cron doesn't provide exact lastRun
-    };
   }
 }

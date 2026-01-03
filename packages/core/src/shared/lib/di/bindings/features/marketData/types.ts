@@ -21,8 +21,6 @@ export const MARKET_DATA_TYPES = {
   RemoveSymbolsFromIngestionUseCase: Symbol.for(
     'MarketData.RemoveSymbolsFromIngestionUseCase'
   ),
-  GapRecoveryUseCase: Symbol.for('MarketData.GapRecoveryUseCase'),
   // Hexagonal Ports
   SnapshotPersistencePort: Symbol.for('MarketData.SnapshotPersistencePort'),
-  RestApiGapRecoveryPort: Symbol.for('MarketData.RestApiGapRecoveryPort'),
 } as const;

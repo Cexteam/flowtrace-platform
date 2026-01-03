@@ -48,14 +48,6 @@ export function getDefaultWorkerScriptPath(): string {
 }
 
 /**
- * Default worker script path - points to the worker.js in @flowtrace/core/dist
- * Uses import.meta.url for correct resolution in both Node.js and Electron
- *
- * @deprecated Use getDefaultWorkerScriptPath() for dynamic resolution
- */
-export const DEFAULT_WORKER_SCRIPT_PATH = getDefaultWorkerScriptPath();
-
-/**
  * Internal worker tracking
  */
 interface WorkerEntry {

@@ -5,8 +5,6 @@
  * These bindings are used by both main and worker threads.
  *
  * Services bound here:
- * - FootprintCalculator: Pure function service for footprint calculations
- * - TimeframeRollup: Pure function service for timeframe rollup
  * - ProcessTradeUseCase: Application use case for processing trades
  * - InitializeSymbolUseCase: Application use case for initializing symbols
  * - CandleProcessingService: Main application service
@@ -15,10 +13,6 @@
 
 import { Container } from 'inversify';
 import { CANDLE_PROCESSING_TYPES } from './types.js';
-
-// Domain Services
-import { FootprintCalculator } from '../../../../../../features/candleProcessing/domain/services/FootprintCalculator.js';
-import { TimeframeRollup } from '../../../../../../features/candleProcessing/domain/services/TimeframeRollup.js';
 
 // Application Layer - Use Cases
 import { ProcessTradeUseCase } from '../../../../../../features/candleProcessing/application/use-cases/ProcessTrade/ProcessTradeUseCase.js';
@@ -35,17 +29,6 @@ import { CandleProcessingPort } from '../../../../../../features/candleProcessin
  * @param container - InversifyJS container
  */
 export function configureCandleProcessingShared(container: Container): void {
-  // Domain Services (pure functions, stateless)
-  container
-    .bind(CANDLE_PROCESSING_TYPES.FootprintCalculator)
-    .to(FootprintCalculator)
-    .inSingletonScope();
-
-  container
-    .bind(CANDLE_PROCESSING_TYPES.TimeframeRollup)
-    .to(TimeframeRollup)
-    .inSingletonScope();
-
   // Application Use Cases
   container
     .bind(CANDLE_PROCESSING_TYPES.ProcessTradeUseCase)

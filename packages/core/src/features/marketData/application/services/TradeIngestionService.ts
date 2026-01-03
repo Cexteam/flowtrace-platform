@@ -1,16 +1,6 @@
 import { injectable, inject } from 'inversify';
-// Use types-only import to avoid circular dependency with ContainerFactory
-import {
-  TYPES,
-  WORKER_MANAGEMENT_TYPES,
-} from '../../../../shared/lib/di/core/types.js';
+import { TYPES } from '../../../../shared/lib/di/core/types.js';
 import { TradeRouterDrivingPort } from '../../../tradeRouter/application/ports/in/TradeRouterDrivingPort.js';
-import { WorkerCommunicationPort } from '../../../workerManagement/application/ports/in/WorkerCommunicationPort.js';
-import {
-  WorkerPoolPort,
-  WorkerPoolConfig,
-} from '../../../workerManagement/application/ports/in/WorkerPoolPort.js';
-import { ConsistentHashRouter } from '../../../workerManagement/domain/services/ConsistentHashRouter.js';
 import {
   AddSymbolsToIngestionUseCase,
   RemoveSymbolsFromIngestionUseCase,
@@ -27,7 +17,6 @@ import {
   IngestionRequest,
   IngestionResult,
   IngestionStatus,
-  HealthMetrics,
 } from '../ports/in/TradeIngestionPort.js';
 import { createLogger } from '../../../../shared/lib/logger/logger.js';
 import { env } from '../../../../env/index.js';
@@ -44,6 +33,7 @@ const logger = createLogger('TradeIngestionService');
  * Ultra-minimal architecture: Direct routing to worker-owned footprint logic
  *
  * ✅ DRIVING PORT IMPLEMENTATION: External actors call application through this interface
+ * ✅ CLEAN ARCHITECTURE: Only imports from tradeRouter, not workerManagement
  */
 @injectable()
 export class TradeIngestionService implements TradeIngestionPort {
@@ -60,17 +50,8 @@ export class TradeIngestionService implements TradeIngestionPort {
     @inject(TYPES.RemoveSymbolsFromIngestionUseCase)
     private removeSymbolsUseCase: RemoveSymbolsFromIngestionUseCase,
     @inject(TYPES.TradeStreamPort)
-    private tradeStreamPort: TradeStreamPort,
-    @inject(WORKER_MANAGEMENT_TYPES.WorkerPoolPort)
-    private workerPoolPort: WorkerPoolPort,
-    @inject(WORKER_MANAGEMENT_TYPES.WorkerCommunicationPort)
-    private workerCommunicationPort: WorkerCommunicationPort,
-    @inject(WORKER_MANAGEMENT_TYPES.ConsistentHashRouter)
-    private consistentHashRouter: ConsistentHashRouter
-  ) {
-    // ✅ NO infrastructure instantiation in Application Layer!
-    // Worker management is now injected via ports
-  }
+    private tradeStreamPort: TradeStreamPort
+  ) {}
 
   /**
    * Start the complete data ingestion pipeline (Driving Port Implementation)
@@ -92,10 +73,24 @@ export class TradeIngestionService implements TradeIngestionPort {
     try {
       logger.info('Starting trade ingestion service...');
 
-      // ✅ PHASE 0: Initialize worker pool (waits for all workers to be ready)
-      // Requirements 3.1: Initialize worker pool and wait for all workers to be ready before proceeding
-      await this.initializeWorkerPool();
-      logger.info('All workers are ready');
+      // ✅ PHASE 0: Initialize worker pool via tradeRouterPort
+      const numWorkers = env.WORKER_THREADS_COUNT || 2;
+      const socketPath =
+        env.IPC_SOCKET_PATH || '/tmp/flowtrace-persistence.sock';
+
+      logger.info(
+        `🚀 Initializing ${numWorkers} worker threads via TradeRouterPort (socketPath: ${socketPath})...`
+      );
+
+      await this.tradeRouterPort.initializeWorkerPool({
+        workerCount: numWorkers,
+        socketPath,
+      });
+
+      const status = this.tradeRouterPort.getWorkerPoolStatus();
+      logger.info(
+        `🚀 Worker pool initialization complete: ${status.healthyWorkers}/${status.totalWorkers} workers healthy`
+      );
 
       // ✅ PHASE 1: Fetch active trading symbols
       const activeSymbols = await this.fetchActiveSymbols();
@@ -109,8 +104,7 @@ export class TradeIngestionService implements TradeIngestionPort {
         );
 
         // Still need to initialize workers with socketPath for dynamic symbol addition
-        // Workers need socketPath to persist state when symbols are added later
-        await this.sendWorkerInitMessages([]);
+        await this.tradeRouterPort.initializeSymbolRouting([], socketPath);
 
         // Register trade callback for when symbols are added dynamically
         this.tradeStreamPort.setTradeCallback((trades: Trades) => {
@@ -136,10 +130,15 @@ export class TradeIngestionService implements TradeIngestionPort {
         };
       }
 
-      // ✅ PHASE 2: Initialize symbol routing to workers
-      // Requirements 3.2: Initialize symbol routing after workers are ready
-      await this.initializeSymbolRouting(activeSymbols);
-      logger.info('Symbol routing initialized');
+      // ✅ PHASE 2: Initialize symbol routing to workers via tradeRouterPort
+      logger.info('Initializing symbol routing...');
+      const routingResult = await this.tradeRouterPort.initializeSymbolRouting(
+        activeSymbols,
+        socketPath
+      );
+      logger.info(
+        `Symbol routing initialized: ${routingResult.assignedSymbols}/${activeSymbols.length} symbols assigned`
+      );
 
       // ✅ PHASE 3: Register trade callback through port
       this.tradeStreamPort.setTradeCallback((trades: Trades) => {
@@ -147,7 +146,6 @@ export class TradeIngestionService implements TradeIngestionPort {
       });
 
       // ✅ PHASE 4: Connect to WebSocket streams (LAST - only after routing is ready)
-      // Requirements 3.3, 3.4: Connect WebSocket only after symbol routing is complete
       await this.tradeStreamPort.connect(activeSymbols);
       this.connectedSymbols = activeSymbols;
 
@@ -159,7 +157,7 @@ export class TradeIngestionService implements TradeIngestionPort {
         success: true,
         message: 'Ingestion service started successfully',
         connectedSymbols: this.connectedSymbols,
-        failedSymbols: [],
+        failedSymbols: routingResult.failedSymbols,
         timestamp: new Date(),
         metadata: {
           connectionId: `${Date.now()}`,
@@ -201,22 +199,6 @@ export class TradeIngestionService implements TradeIngestionPort {
     } catch (error) {
       logger.error('Error stopping trade ingestion service', error);
     }
-  }
-
-  /**
-   * Restart the data ingestion pipeline (Driving Port Implementation)
-   */
-  async restartIngestion(): Promise<IngestionResult> {
-    await this.restart();
-    return {
-      success: this.isRunning,
-      message: this.isRunning
-        ? 'Service restarted successfully'
-        : 'Service restart failed',
-      connectedSymbols: this.connectedSymbols,
-      failedSymbols: [],
-      timestamp: new Date(),
-    };
   }
 
   /**
@@ -359,47 +341,9 @@ export class TradeIngestionService implements TradeIngestionPort {
     };
   }
 
-  async getHealthMetrics(): Promise<HealthMetrics> {
-    const webSocketHealth = this.tradeStreamPort.isHealthy();
-
-    return {
-      timestamp: new Date(),
-      uptime: process.uptime(),
-      connectedSymbols: this.connectedSymbols.length,
-      webSocketHealth: {
-        status: webSocketHealth ? 'healthy' : 'unhealthy',
-        reconnects: 0,
-        lastHeartbeat: Date.now(),
-        connectionHealth: webSocketHealth ? 100 : 0,
-      },
-      footprintHealth: {
-        initializedSymbols: this.connectedSymbols.length,
-        processingRate: this.isRunning ? 1.0 : 0.0,
-      },
-      gapDetection: {
-        totalGaps: 0,
-        lastGap: undefined,
-      },
-      performance: {
-        memoryUsage: process.memoryUsage().heapUsed,
-        cpuUsage: process.cpuUsage().user + process.cpuUsage().system,
-      },
-    };
-  }
-
-  async getConnectedSymbols(): Promise<string[]> {
-    return [...this.connectedSymbols];
-  }
-
   /**
    * Utility methods (Port Interface Implementation)
    */
-  async resetTracking(): Promise<void> {
-    await this.stopIngestion();
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    await this.startIngestion();
-  }
-
   async isHealthy(): Promise<boolean> {
     return this.isRunning && this.tradeStreamPort.isHealthy();
   }
@@ -412,14 +356,10 @@ export class TradeIngestionService implements TradeIngestionPort {
    */
   private async fetchActiveSymbols(): Promise<string[]> {
     try {
-      // Query database for active symbols (admin-approved)
       const symbols = await this.symbolRepository.findActiveSymbols();
-
       logger.info(
         `Fetched ${symbols.length} active symbols from database (admin-approved)`
       );
-
-      // Return symbol names
       return symbols.map((symbol) => symbol.symbol);
     } catch (error) {
       logger.error('Failed to fetch active symbols from database', error);
@@ -435,7 +375,6 @@ export class TradeIngestionService implements TradeIngestionPort {
       if (trades.length === 0) return;
 
       const tradesBySymbol = trades.reduce((acc, trade) => {
-        // Trade is individual trade object
         const symbol = trade?.s || 'UNKNOWN';
         if (!acc[symbol]) {
           acc[symbol] = [];
@@ -463,172 +402,11 @@ export class TradeIngestionService implements TradeIngestionPort {
     trades: Trades
   ): Promise<void> {
     try {
-      // ✅ ROUTE VIA CLEAN ARCHITECTURE: Use TradeRouterDrivingPort
       await this.tradeRouterPort.routeTrades(symbol, trades, {
         priority: 'normal',
       });
     } catch (error) {
       logger.error(`Failed to route trades for ${symbol}`, error);
     }
-  }
-
-  /**
-   * Initialize symbol routing to workers for trade processing
-   * (Workers own and handle footprint calculations internally)
-   */
-  private async initializeSymbolRouting(symbols: string[]): Promise<void> {
-    // Step 1: Assign symbols to workers via routing
-    const results = await Promise.allSettled(
-      symbols.map((symbol) => this.tradeRouterPort.assignSymbolToWorker(symbol))
-    );
-
-    const failedSymbols = results
-      .map((result, index) =>
-        result.status === 'rejected' ? symbols[index] : null
-      )
-      .filter((symbol) => symbol !== null);
-
-    if (failedSymbols.length > 0) {
-      logger.warn(
-        `Symbol initialization failed for ${failedSymbols.length} symbols (invalid format)`
-      );
-    }
-
-    logger.info(
-      `Symbol routing initialized: ${symbols.length - failedSymbols.length}/${
-        symbols.length
-      } symbols assigned to workers`
-    );
-
-    // Step 2: Send WORKER_INIT to each worker with their assigned symbols
-    // This triggers state loading and starts periodic flush
-    // Pass symbols directly since this.connectedSymbols is not set yet
-    await this.sendWorkerInitMessages(symbols);
-  }
-
-  /**
-   * Send WORKER_INIT message to each worker with their assigned symbols
-   * This triggers:
-   * - State loading from persistence (restore candle states)
-   * - Start periodic flush (save dirty states every 30s)
-   *
-   * Uses ConsistentHashRouter to pre-compute symbol assignments based on
-   * the same algorithm used for trade routing. This ensures symbols are
-   * loaded into the correct worker that will process their trades.
-   *
-   * @param symbols - List of symbols to assign to workers
-   */
-  private async sendWorkerInitMessages(symbols: string[]): Promise<void> {
-    const socketPath = env.IPC_SOCKET_PATH || '/tmp/flowtrace-persistence.sock';
-
-    try {
-      // Get all worker IDs from the pool
-      const workerIds = this.workerPoolPort.getWorkerIds();
-      if (workerIds.length === 0) {
-        logger.warn('No workers available for WORKER_INIT');
-        return;
-      }
-
-      // Pre-compute symbol assignments using ConsistentHashRouter
-      // This ensures symbols are assigned to the same worker that will process their trades
-      const workerSymbolMap = new Map<string, string[]>();
-      for (const workerId of workerIds) {
-        workerSymbolMap.set(workerId, []);
-      }
-
-      // Assign each symbol to its worker based on consistent hash
-      // Use the symbols parameter (not this.connectedSymbols which may not be set yet)
-      for (const symbol of symbols) {
-        try {
-          const routingResult =
-            this.consistentHashRouter.getWorkerForSymbol(symbol);
-          const workerSymbols = workerSymbolMap.get(routingResult.workerId);
-          if (workerSymbols) {
-            workerSymbols.push(symbol);
-          }
-        } catch (error) {
-          logger.warn(
-            `Failed to route symbol ${symbol}: ${
-              error instanceof Error ? error.message : 'Unknown error'
-            }`
-          );
-        }
-      }
-
-      logger.info(`Sending WORKER_INIT to ${workerIds.length} workers...`);
-
-      // Send WORKER_INIT to each worker with their pre-computed assigned symbols
-      const initPromises = workerIds.map(async (workerId) => {
-        const assignedSymbols = workerSymbolMap.get(workerId) || [];
-        try {
-          await this.workerCommunicationPort.initializeWorker(workerId, {
-            socketPath,
-            assignedSymbols,
-          });
-          logger.info(
-            `Worker ${workerId} initialized with ${
-              assignedSymbols.length
-            } symbols: [${assignedSymbols.slice(0, 3).join(', ')}${
-              assignedSymbols.length > 3 ? '...' : ''
-            }]`
-          );
-        } catch (error) {
-          logger.error(
-            `Failed to initialize worker ${workerId}: ${
-              error instanceof Error ? error.message : 'Unknown error'
-            }`
-          );
-        }
-      });
-
-      await Promise.all(initPromises);
-      logger.info('All workers initialized with assigned symbols');
-    } catch (error) {
-      logger.error('Failed to send WORKER_INIT messages', error);
-      // Don't throw - workers can still process trades, just won't have state persistence
-    }
-  }
-
-  /**
-   * Initialize worker pool - creates worker threads and sets up communication
-   * Uses WorkerPoolPort for clean architecture compliance
-   */
-  private async initializeWorkerPool(): Promise<void> {
-    const numWorkers = env.WORKER_THREADS_COUNT || 2;
-    const socketPath = env.IPC_SOCKET_PATH || '/tmp/flowtrace-persistence.sock';
-
-    logger.info(
-      `🚀 Initializing ${numWorkers} worker threads via WorkerPoolPort (socketPath: ${socketPath})...`
-    );
-
-    try {
-      // ✅ Use WorkerPoolPort to initialize worker pool
-      // Note: workerScript is NOT set - adapter uses getDefaultWorkerScriptPath()
-      // which resolves correctly using __dirname for both server and desktop
-      const config: WorkerPoolConfig = {
-        workerCount: numWorkers,
-        // workerScript not needed - adapter uses getDefaultWorkerScriptPath() automatically
-        socketPath, // Pass socketPath for IPC-based persistence
-      };
-
-      await this.workerPoolPort.initialize(config);
-
-      const status = this.workerPoolPort.getStatus();
-      logger.info(
-        `🚀 Worker pool initialization complete: ${status.healthyWorkers}/${status.totalWorkers} workers healthy`
-      );
-    } catch (error) {
-      logger.error('❌ Failed to initialize worker pool', error);
-      throw error; // Fail fast if worker initialization fails
-    }
-  }
-
-  /**
-   * Restart the service (private implementation)
-   */
-  private async restart(): Promise<IngestionResult> {
-    await this.stopIngestion();
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    return await this.startIngestion();
   }
 }

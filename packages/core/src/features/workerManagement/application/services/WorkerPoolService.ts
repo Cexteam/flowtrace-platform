@@ -213,20 +213,6 @@ export class WorkerPoolService implements WorkerPoolPort {
   }
 
   /**
-   * Get count of ready workers
-   */
-  getReadyWorkerCount(): number {
-    return this.readyWorkers.size;
-  }
-
-  /**
-   * Get list of pending worker IDs (not yet ready)
-   */
-  getPendingWorkers(): string[] {
-    return Array.from(this.pendingWorkers);
-  }
-
-  /**
    * Check if all workers are ready
    */
   areAllWorkersReady(): boolean {

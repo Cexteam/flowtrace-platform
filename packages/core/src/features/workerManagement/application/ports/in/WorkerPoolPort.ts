@@ -110,16 +110,6 @@ export interface WorkerPoolPort {
   hasWorker(workerId: string): boolean;
 
   /**
-   * Get count of ready workers
-   */
-  getReadyWorkerCount(): number;
-
-  /**
-   * Get list of pending worker IDs (not yet ready)
-   */
-  getPendingWorkers(): string[];
-
-  /**
    * Check if all workers are ready
    */
   areAllWorkersReady(): boolean;

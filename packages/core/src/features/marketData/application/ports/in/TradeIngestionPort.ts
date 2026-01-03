@@ -11,7 +11,6 @@ export interface TradeIngestionPort {
   // Lifecycle Management
   startIngestion(request?: IngestionRequest): Promise<IngestionResult>;
   stopIngestion(): Promise<void>;
-  restartIngestion(): Promise<IngestionResult>;
 
   // Dynamic Symbol Management
   addSymbols(symbols: string[]): Promise<{
@@ -30,11 +29,8 @@ export interface TradeIngestionPort {
 
   // Monitoring & Status
   getStatus(): Promise<IngestionStatus>;
-  getHealthMetrics(): Promise<HealthMetrics>;
-  getConnectedSymbols(): Promise<string[]>;
 
   // Utility Methods
-  resetTracking(): Promise<void>;
   isHealthy(): Promise<boolean>;
 }
 
@@ -87,31 +83,4 @@ export interface IngestionStatus {
   timestamp: Date;
   uptime?: number;
   errors?: string[];
-}
-
-export interface HealthMetrics {
-  timestamp: Date;
-  uptime: number;
-  connectedSymbols: number;
-  webSocketHealth: {
-    status: 'healthy' | 'degraded' | 'unhealthy';
-    reconnects: number;
-    lastHeartbeat: number;
-    connectionHealth: number;
-  };
-  footprintHealth: {
-    initializedSymbols: number;
-    processingRate: number;
-  };
-  gapDetection: {
-    totalGaps: number;
-    lastGap?: {
-      symbol: string;
-      timestamp: Date;
-    };
-  };
-  performance: {
-    memoryUsage: number;
-    cpuUsage: number;
-  };
 }

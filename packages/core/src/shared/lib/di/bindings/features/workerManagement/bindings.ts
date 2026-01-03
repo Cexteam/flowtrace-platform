@@ -12,7 +12,6 @@
  * - WorkerIPCService: Worker IPC communication service (inbound port)
  * - WorkerHealthMonitorService: Worker health monitoring service (inbound port)
  * - SpawnWorkerUseCase: Spawn new worker thread
- * - SendTradeToWorkerUseCase: Send trade to worker
  * - CheckWorkerHealthUseCase: Check worker health
  * - GetSystemHealthUseCase: Get system health status
  * - ConsistentHashRouter: Domain service for consistent hashing
@@ -31,7 +30,6 @@ import { WorkerThreadPort } from '../../../../../../features/workerManagement/ap
 
 // Application Layer - Use Cases
 import { SpawnWorkerUseCase } from '../../../../../../features/workerManagement/application/use-cases/SpawnWorker/index.js';
-import { SendTradeToWorkerUseCase } from '../../../../../../features/workerManagement/application/use-cases/SendTradeToWorker/index.js';
 import { CheckWorkerHealthUseCase } from '../../../../../../features/workerManagement/application/use-cases/CheckWorkerHealth/index.js';
 import { GetSystemHealthUseCase } from '../../../../../../features/workerManagement/application/use-cases/GetSystemHealth/index.js';
 
@@ -71,11 +69,6 @@ export function configureWorkerManagementCore(container: Container): void {
   container
     .bind(WORKER_MANAGEMENT_TYPES.SpawnWorkerUseCase)
     .to(SpawnWorkerUseCase)
-    .inSingletonScope();
-
-  container
-    .bind(WORKER_MANAGEMENT_TYPES.SendTradeToWorkerUseCase)
-    .to(SendTradeToWorkerUseCase)
     .inSingletonScope();
 
   container

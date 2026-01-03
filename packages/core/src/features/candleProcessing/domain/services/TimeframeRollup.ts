@@ -48,40 +48,6 @@ const resolutions = [
 ];
 
 /**
- * Calculate the open time for a timestamp at a given timeframe
- * Uses lodash floor to match original: floor(candle.t) - floor(candle.t % (resolution * 1000))
- *
- * @param timestamp - Timestamp in milliseconds
- * @param timeframe - Target timeframe
- * @returns Open time aligned to timeframe boundary
- *
- */
-export function calculateOpentime(
-  timestamp: number,
-  timeframe: Timeframe
-): number {
-  const resolutionMs = timeframe.seconds * 1000;
-  return _.floor(timestamp) - _.floor(timestamp % resolutionMs);
-}
-
-/**
- * Calculate the check time (next period boundary) for a timestamp
- * Uses lodash floor to match original: floor(time) - floor(time % (resolution * 1000))
- *
- * @param timestamp - Current timestamp in milliseconds
- * @param timeframe - Target timeframe
- * @returns Check time (start of current period based on timestamp)
- *
- */
-export function calculateCheckTime(
-  timestamp: number,
-  timeframe: Timeframe
-): number {
-  const resolutionMs = timeframe.seconds * 1000;
-  return _.floor(timestamp) - _.floor(timestamp % resolutionMs);
-}
-
-/**
  * UpdatedGroupCandles - Roll up a completed 1s candle to all higher timeframes
  * Ported exactly from cm_sync_candle/src/exchange_crypto/utils/conf_candle.ts
  *
@@ -228,52 +194,4 @@ export function rollup(
   nextTradeTimestamp: number
 ): RollupResult {
   return UpdatedGroupCandles(candleGroup, completedCandle, nextTradeTimestamp);
-}
-
-/**
- * TimeframeRollup class
- * Stateless service for timeframe rollup operations
- * Can be used as injectable service or via static methods
- */
-export class TimeframeRollup {
-  /**
-   * Roll up a completed candle to higher timeframes
-   * Uses UpdatedGroupCandles logic from production
-   */
-  rollup(
-    candleGroup: CandleGroup,
-    completedCandle: FootprintCandle,
-    nextTradeTimestamp: number
-  ): RollupResult {
-    return UpdatedGroupCandles(
-      candleGroup,
-      completedCandle,
-      nextTradeTimestamp
-    );
-  }
-
-  /**
-   * UpdatedGroupCandles - direct access to production logic
-   */
-  updatedGroupCandles(
-    candleGroup: CandleGroup,
-    completedCandle: FootprintCandle,
-    time: number
-  ): RollupResult {
-    return UpdatedGroupCandles(candleGroup, completedCandle, time);
-  }
-
-  /**
-   * Calculate open time for a timestamp at a timeframe
-   */
-  calculateOpentime(timestamp: number, timeframe: Timeframe): number {
-    return calculateOpentime(timestamp, timeframe);
-  }
-
-  /**
-   * Calculate check time for a timestamp at a timeframe
-   */
-  calculateCheckTime(timestamp: number, timeframe: Timeframe): number {
-    return calculateCheckTime(timestamp, timeframe);
-  }
 }

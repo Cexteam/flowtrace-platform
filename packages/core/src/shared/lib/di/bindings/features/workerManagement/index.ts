@@ -23,7 +23,6 @@
  *
  * ### Use Cases
  * - SpawnWorkerUseCase: Spawn new worker thread
- * - SendTradeToWorkerUseCase: Send trade data to worker
  * - CheckWorkerHealthUseCase: Check individual worker health
  * - GetSystemHealthUseCase: Get overall system health status
  *

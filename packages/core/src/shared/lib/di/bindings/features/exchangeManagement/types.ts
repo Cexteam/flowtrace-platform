@@ -7,53 +7,29 @@
 
 export const EXCHANGE_MANAGEMENT_TYPES = {
   // Ports
-  ExchangeConfigPort: Symbol.for('ExchangeManagement.ExchangeConfigPort'),
-  ExchangeHealthPort: Symbol.for('ExchangeManagement.ExchangeHealthPort'),
   ExchangeManagementPort: Symbol.for(
     'ExchangeManagement.ExchangeManagementPort'
   ),
 
   // Services
-  ExchangeConfigService: Symbol.for('ExchangeManagement.ExchangeConfigService'),
-  ExchangeHealthMonitor: Symbol.for('ExchangeManagement.ExchangeHealthMonitor'),
   ExchangeManagementService: Symbol.for(
     'ExchangeManagement.ExchangeManagementService'
   ),
 
-  // Note: ExchangeConfigRepository replaced by ExchangeRepository
+  // Repository
   ExchangeRepository: Symbol.for('ExchangeManagement.ExchangeRepository'),
 
-  // Use Cases - Inbound Ports
-  GetExchangePort: Symbol.for('ExchangeManagement.GetExchangePort'),
-  UpdateExchangePort: Symbol.for('ExchangeManagement.UpdateExchangePort'),
-  GetEnabledExchangesPort: Symbol.for(
-    'ExchangeManagement.GetEnabledExchangesPort'
-  ),
-  TestExchangeConnectionPort: Symbol.for(
-    'ExchangeManagement.TestExchangeConnectionPort'
-  ),
-  ManageExchangeCredentialsPort: Symbol.for(
-    'ExchangeManagement.ManageExchangeCredentialsPort'
-  ),
-
-  // Use Cases - Implementations
+  // Use Cases
   GetExchangeUseCase: Symbol.for('ExchangeManagement.GetExchangeUseCase'),
   GetAllExchangesUseCase: Symbol.for(
     'ExchangeManagement.GetAllExchangesUseCase'
   ),
   UpdateExchangeUseCase: Symbol.for('ExchangeManagement.UpdateExchangeUseCase'),
-  GetEnabledExchangesUseCase: Symbol.for(
-    'ExchangeManagement.GetEnabledExchangesUseCase'
-  ),
   TestExchangeConnectionUseCase: Symbol.for(
     'ExchangeManagement.TestExchangeConnectionUseCase'
   ),
-  ManageExchangeCredentialsUseCase: Symbol.for(
-    'ExchangeManagement.ManageExchangeCredentialsUseCase'
-  ),
 
-  // API Clients - Outbound Ports
-  ExchangeApiClient: Symbol.for('ExchangeManagement.ExchangeApiClient'),
+  // API Client Factory
   ExchangeApiClientFactory: Symbol.for(
     'ExchangeManagement.ExchangeApiClientFactory'
   ),

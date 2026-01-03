@@ -9,5 +9,4 @@ export {
   NodeWorkerThreadAdapter,
   WORKER_SCRIPT_PATH_TOKEN,
   getDefaultWorkerScriptPath,
-  DEFAULT_WORKER_SCRIPT_PATH,
 } from './adapters/NodeWorkerThreadAdapter.js';

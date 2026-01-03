@@ -28,15 +28,6 @@ export interface SyncResult {
 }
 
 /**
- * Schedule status information
- */
-export interface ScheduleStatus {
-  isActive: boolean;
-  schedule: string;
-  lastRun?: Date;
-}
-
-/**
  * Symbol Management Port Interface
  *
  * Provides operations for managing trading symbols across exchanges
@@ -139,12 +130,4 @@ export interface SymbolManagementPort {
    * @returns Promise that resolves when sync is complete
    */
   runSyncNow(): Promise<void>;
-
-  /**
-   * Get current schedule status
-   * Returns information about the scheduled synchronization
-   *
-   * @returns Current schedule status
-   */
-  getScheduleStatus(): ScheduleStatus;
 }

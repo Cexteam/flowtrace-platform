@@ -15,8 +15,6 @@ import _ from 'lodash';
 const { cloneDeep } = _;
 import { TradeStreamPort } from '../../application/ports/out/TradeStreamPort.js';
 import { WebSocketConnectionStatus } from '../../domain/types/index.js';
-import { RestApiGapRecoveryPort } from '../../application/ports/out/RestApiGapRecoveryPort.js';
-import { TYPES } from '../../../../shared/lib/di/core/types.js';
 import { EXCHANGE_MANAGEMENT_SYMBOLS } from '../../../../shared/lib/di/bindings/features/exchangeManagement/types.js';
 import { WebSocketManager } from '../services/index.js';
 import { createLogger } from '../../../../shared/lib/logger/logger.js';
@@ -36,7 +34,6 @@ export class BinanceWsTradeStreamAdapter implements TradeStreamPort {
   private activeSymbols: string[] = [];
   private tradeCallback?: (trades: Trades[]) => void;
   private wsManager?: WebSocketManager;
-  private wsManager1?: WebSocketManager;
 
   // Cached exchange config (lazy loaded)
   private exchangeConfig: Exchange | null = null;
@@ -45,8 +42,6 @@ export class BinanceWsTradeStreamAdapter implements TradeStreamPort {
   private tradeBuffer = new Map<string, Trade[]>();
 
   constructor(
-    @inject(TYPES.RestApiGapRecoveryPort)
-    private restApiGapRecovery: RestApiGapRecoveryPort,
     @inject(EXCHANGE_MANAGEMENT_SYMBOLS.ExchangeRepository)
     private exchangeRepository: ExchangeRepository
   ) {}
@@ -233,42 +228,6 @@ export class BinanceWsTradeStreamAdapter implements TradeStreamPort {
       lastHeartbeat: Date.now(),
       reconnectCount: connStatus.reconnectAttempts,
     };
-  }
-
-  resetTracking(): void {
-    this.tradeBuffer.clear();
-    logger.info('Trade buffer reset');
-  }
-
-  /**
-   * Get statistics about the adapter
-   * Note: Gap detection stats are now in worker thread
-   */
-  getGapStatistics(): {
-    totalTrades: number;
-    gapsDetected: number;
-    lastTradeId: number | null;
-    connectionHealth: number;
-  } {
-    const connectionHealth = this.activeSymbols.length > 0 ? 100 : 0;
-    return {
-      totalTrades: 0, // No longer tracked here
-      gapsDetected: 0, // Gap detection moved to worker thread
-      lastTradeId: null, // No longer tracked here
-      connectionHealth: Math.round(connectionHealth),
-    };
-  }
-
-  /**
-   * Get pending gaps
-   * Note: Gap records are now persisted via IPC in worker thread
-   */
-  getPendingGaps(): Map<
-    string,
-    { from: number; to: number; timestamp: number }[]
-  > {
-    // Gap records are now persisted via IPC in worker thread
-    return new Map();
   }
 
   isHealthy(): boolean {

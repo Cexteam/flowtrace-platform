@@ -25,9 +25,7 @@ import { ExchangeManagementService } from '../../../../../../features/exchangeMa
 import { GetExchangeUseCase } from '../../../../../../features/exchangeManagement/application/use-cases/GetExchange/GetExchangeUseCase.js';
 import { GetAllExchangesUseCase } from '../../../../../../features/exchangeManagement/application/use-cases/GetAllExchanges/GetAllExchangesUseCase.js';
 import { UpdateExchangeUseCase } from '../../../../../../features/exchangeManagement/application/use-cases/UpdateExchange/UpdateExchangeUseCase.js';
-import { GetEnabledExchangesUseCase } from '../../../../../../features/exchangeManagement/application/use-cases/GetEnabledExchanges/GetEnabledExchangesUseCase.js';
 import { TestExchangeConnectionUseCase } from '../../../../../../features/exchangeManagement/application/use-cases/TestExchangeConnection/TestExchangeConnectionUseCase.js';
-import { ManageExchangeCredentialsUseCase } from '../../../../../../features/exchangeManagement/application/use-cases/ManageExchangeCredentials/ManageExchangeCredentialsUseCase.js';
 
 // Note: Use cases implement their own port interfaces directly
 
@@ -103,24 +101,10 @@ export function configureExchangeManagement(container: Container): void {
     .inSingletonScope();
 
   container
-    .bind<GetEnabledExchangesUseCase>(
-      EXCHANGE_MANAGEMENT_TYPES.GetEnabledExchangesUseCase
-    )
-    .to(GetEnabledExchangesUseCase)
-    .inSingletonScope();
-
-  container
     .bind<TestExchangeConnectionUseCase>(
       EXCHANGE_MANAGEMENT_TYPES.TestExchangeConnectionUseCase
     )
     .to(TestExchangeConnectionUseCase)
-    .inSingletonScope();
-
-  container
-    .bind<ManageExchangeCredentialsUseCase>(
-      EXCHANGE_MANAGEMENT_TYPES.ManageExchangeCredentialsUseCase
-    )
-    .to(ManageExchangeCredentialsUseCase)
     .inSingletonScope();
 
   // ========================================

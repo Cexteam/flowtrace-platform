@@ -103,24 +103,6 @@ export class WorkerHealthMonitorService implements WorkerHealthMonitorPort {
   }
 
   /**
-   * Record successful route handling (performance metrics)
-   */
-  recordRouteHandled(workerId: string, processingTimeMs: number): void {
-    const status = this.healthStatus.get(workerId);
-    if (status) {
-      status.totalRoutesHandled++;
-      status.lastHeartbeat = new Date();
-
-      // Rolling average for processing time
-      status.averageProcessingTime =
-        (status.averageProcessingTime + processingTimeMs) / 2;
-
-      // Calculate routes per second
-      status.routesPerSecond = 1000 / processingTimeMs;
-    }
-  }
-
-  /**
    * Record worker error
    */
   recordError(workerId: string, error: Error): void {
@@ -139,49 +121,6 @@ export class WorkerHealthMonitorService implements WorkerHealthMonitorPort {
     return this.getSystemHealthUseCase.getAllWorkersHealthStatus(
       this.healthStatus
     ).workers;
-  }
-
-  /**
-   * Check health of a specific worker (delegates to use case)
-   */
-  async checkWorkerHealth(workerId: string): Promise<boolean> {
-    const result = await this.checkWorkerHealthUseCase.execute({ workerId });
-
-    // Update internal state based on result
-    const status = this.healthStatus.get(workerId);
-    if (status) {
-      status.isAlive = result.isHealthy;
-      status.lastHeartbeat = result.checkedAt;
-      if (!result.isHealthy && result.error) {
-        this.recordError(workerId, new Error(result.error));
-      }
-    }
-
-    return result.isHealthy;
-  }
-
-  /**
-   * Get unhealthy workers (delegates to use case)
-   */
-  getUnhealthyWorkers(): string[] {
-    return this.getSystemHealthUseCase.getUnhealthyWorkers(this.healthStatus)
-      .unhealthyWorkerIds;
-  }
-
-  /**
-   * Get system health overview (delegates to use case)
-   */
-  getSystemHealth(): SystemHealthOverview {
-    const result = this.getSystemHealthUseCase.execute(this.healthStatus);
-    // Return without retrievedAt to match interface
-    return {
-      totalWorkers: result.totalWorkers,
-      healthyWorkers: result.healthyWorkers,
-      unhealthyWorkers: result.unhealthyWorkers,
-      averageProcessingTime: result.averageProcessingTime,
-      totalErrors: result.totalErrors,
-      healthRatio: result.healthRatio,
-    };
   }
 
   // ============================================================================

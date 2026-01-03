@@ -32,12 +32,9 @@ export const CORE_TOKENS = {
   // Symbol Management
   SYMBOL_MANAGEMENT_SERVICE: 'SYMBOL_MANAGEMENT_SERVICE',
   SYMBOL_REPOSITORY: 'SYMBOL_REPOSITORY',
-  WORKER_ASSIGNMENT_SERVICE: 'WORKER_ASSIGNMENT_SERVICE',
 
   // Trade Router
-  TRADE_ROUTER_SERVICE: 'TRADE_ROUTER_SERVICE',
-  WORKER_MANAGER_SERVICE: 'WORKER_MANAGER_SERVICE',
-  ROUTING_SERVICE: 'ROUTING_SERVICE',
+  TRADE_ROUTER_PORT: 'TRADE_ROUTER_PORT',
 
   // Infrastructure
   CACHE: 'CACHE',
@@ -151,50 +148,15 @@ export class CoreModule {
           }
         },
       },
-      {
-        provide: CORE_TOKENS.WORKER_ASSIGNMENT_SERVICE,
-        useFactory: () => {
-          try {
-            return container.get(
-              SYMBOL_MANAGEMENT_TYPES.WorkerAssignmentService
-            );
-          } catch {
-            console.warn('WorkerAssignmentService not bound in container');
-            return null;
-          }
-        },
-      },
 
       // Trade Router services
       {
-        provide: CORE_TOKENS.TRADE_ROUTER_SERVICE,
+        provide: CORE_TOKENS.TRADE_ROUTER_PORT,
         useFactory: () => {
           try {
-            return container.get(TRADE_ROUTER_TYPES.TradeRouterService);
+            return container.get(TRADE_ROUTER_TYPES.TradeRouterDrivingPort);
           } catch {
-            console.warn('TradeRouterService not bound in container');
-            return null;
-          }
-        },
-      },
-      {
-        provide: CORE_TOKENS.WORKER_MANAGER_SERVICE,
-        useFactory: () => {
-          try {
-            return container.get(TRADE_ROUTER_TYPES.WorkerManagerService);
-          } catch {
-            console.warn('WorkerManagerService not bound in container');
-            return null;
-          }
-        },
-      },
-      {
-        provide: CORE_TOKENS.ROUTING_SERVICE,
-        useFactory: () => {
-          try {
-            return container.get(TRADE_ROUTER_TYPES.RoutingService);
-          } catch {
-            console.warn('RoutingService not bound in container');
+            console.warn('TradeRouterDrivingPort not bound in container');
             return null;
           }
         },

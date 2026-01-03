@@ -6,4 +6,3 @@
  */
 
 export * from './SymbolManagementPort.js';
-export * from './WorkerAssignmentServicePort.js';

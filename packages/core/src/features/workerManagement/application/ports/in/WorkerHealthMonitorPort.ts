@@ -64,14 +64,6 @@ export interface WorkerHealthMonitorPort {
   removeWorkerHealth(workerId: string): void;
 
   /**
-   * Record successful route handling (performance metrics)
-   *
-   * @param workerId - The worker's unique identifier
-   * @param processingTimeMs - Processing time in milliseconds
-   */
-  recordRouteHandled(workerId: string, processingTimeMs: number): void;
-
-  /**
    * Record worker error
    *
    * @param workerId - The worker's unique identifier
@@ -85,26 +77,4 @@ export interface WorkerHealthMonitorPort {
    * @returns Map of worker ID to health status
    */
   getHealthStatus(): Map<string, WorkerHealthStatus>;
-
-  /**
-   * Check health of a specific worker
-   *
-   * @param workerId - The worker's unique identifier
-   * @returns Promise resolving to true if worker is healthy
-   */
-  checkWorkerHealth(workerId: string): Promise<boolean>;
-
-  /**
-   * Get unhealthy workers that need restart
-   *
-   * @returns Array of unhealthy worker IDs
-   */
-  getUnhealthyWorkers(): string[];
-
-  /**
-   * Get system health overview
-   *
-   * @returns System-wide health statistics
-   */
-  getSystemHealth(): SystemHealthOverview;
 }

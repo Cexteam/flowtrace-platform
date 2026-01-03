@@ -38,9 +38,6 @@ export {
   CandleGroupDTO,
   PriceBin,
   Aggs,
-  FootprintCalculator,
-  TimeframeRollup,
-  CandleCompletionDetector,
   SymbolConfig as CandleSymbolConfig,
   createDefaultSymbolConfig,
 } from './features/candleProcessing/domain/index.js';
@@ -83,7 +80,6 @@ export {
   SymbolStatus,
   SymbolConfig,
   SymbolManagementService,
-  WorkerAssignmentService,
   SyncSymbolsFromExchangeUseCase,
   ActivateSymbolUseCase,
   DeactivateSymbolUseCase,
@@ -92,12 +88,10 @@ export {
 } from './features/symbolManagement/index.js';
 
 export type {
-  WorkerAssignment,
   SymbolRepository,
   Exchange as SymbolExchange,
   ExchangeMetadata,
   SymbolManagementPort,
-  WorkerAssignmentServicePort,
   // ExchangeApiClient, // Moved to exchangeManagement
   // ExchangeSymbol, // Moved to exchangeManagement
 } from './features/symbolManagement/index.js';
@@ -118,18 +112,11 @@ export {
 import * as TradeRouter from './features/tradeRouter/index.js';
 export { TradeRouter };
 
-export {
-  WorkerThread,
-  HashRing,
-  TradeRouterService,
-  WorkerManagerService,
-  RoutingService,
-} from './features/tradeRouter/index.js';
+export { TradeRouterService } from './features/tradeRouter/index.js';
 
 export type {
   TradeRouterDrivingPort,
-  WorkerManagerDrivingPort,
-  WorkerInfrastructureDrivenPort,
+  InitializeSymbolRoutingResult,
 } from './features/tradeRouter/index.js';
 
 // Worker Management Feature
@@ -186,35 +173,13 @@ export {
   mergeAggsArrays,
 
   // Additional Services
-  calculateBinPrice,
-  applyTradeToAggs,
-  mergeAggs,
-  applyTradeToCandle,
-  calculateVolumeStats,
-  calculateDelta,
   CalAggsFootprint,
-  mergeFootprintAggs,
-  calculateVolumeDelta,
-  normalizePrice,
-  validateTradePrice,
+  mergeAggs,
   RollupResult,
   rollup,
-  calculateOpentime,
-  calculateCheckTime,
-  hasTimeframeCrossed,
+  UpdatedGroupCandles,
   shouldComplete,
   calculateCompletionTime,
-  getPeriodStart,
-  getPeriodEnd,
-  isSamePeriod,
-} from './features/candleProcessing/domain/index.js';
-
-// Additional types for backward compatibility
-export type {
-  Candle,
-  CandlesOfSymbol,
-  TradingPriceBin,
-  FootprintBuffer,
 } from './features/candleProcessing/domain/index.js';
 
 // All deployments now use IPC-based persistence via SQLite.

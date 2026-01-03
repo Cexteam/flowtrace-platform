@@ -10,7 +10,7 @@
 export interface SpawnWorkerRequest {
   /** Unique identifier for the worker */
   workerId: string;
-  /** Path to the worker script (optional - uses DEFAULT_WORKER_SCRIPT_PATH if not provided) */
+  /** Path to the worker script (optional - uses getDefaultWorkerScriptPath() if not provided) */
   scriptPath?: string;
   /** Initial symbols to assign to the worker */
   initialSymbols?: string[];

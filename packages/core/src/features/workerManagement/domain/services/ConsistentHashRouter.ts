@@ -1,11 +1,18 @@
 /**
  * ConsistentHashRouter - Domain service for routing symbols to workers
  *
- * Implements consistent hashing for deterministic symbol-to-worker assignment.
+ * Implements consistent hashing (Ketama-style) for deterministic symbol-to-worker assignment.
  * This ensures that the same symbol always routes to the same worker,
  * providing cache locality and predictable behavior.
  *
+ * Uses improved hash distribution with:
+ * - MurmurHash3-style mixing for better distribution
+ * - Multiple points per virtual node (Ketama-style) for even load balancing
+ *
  */
+
+/** Number of hash points per virtual node (Ketama-style) */
+const POINTS_PER_VNODE = 4;
 
 /**
  * Virtual node in the hash ring
@@ -47,33 +54,39 @@ export class ConsistentHashRouter {
   /**
    * Create a new ConsistentHashRouter
    *
-   * @param virtualNodeCount - Number of virtual nodes per worker (default: 100)
+   * @param virtualNodeCount - Number of virtual nodes per worker (default: 80)
+   *                          Each vnode creates 4 points on ring (Ketama-style)
+   *                          Total points = virtualNodeCount * 4
    */
-  constructor(virtualNodeCount: number = 100) {
+  constructor(virtualNodeCount: number = 80) {
     this.virtualNodeCount = virtualNodeCount;
   }
 
   /**
-   * Add a worker to the hash ring
+   * Add a worker to the hash ring (Ketama-style)
+   *
+   * Creates multiple points per virtual node for better distribution.
+   * Total points per worker = virtualNodeCount * POINTS_PER_VNODE
    *
    * @param workerId - Unique worker identifier
    */
   addWorker(workerId: string): void {
-    // Create virtual nodes for this worker
-    // Use a format that produces well-distributed hashes
+    // Create virtual nodes with multiple points each (Ketama-style)
     for (let i = 0; i < this.virtualNodeCount; i++) {
-      // Use a format that spreads hash values across the ring
-      const virtualKey = `vnode#${i}#${workerId}`;
-      const hashValue = this.hash(virtualKey);
+      // Each virtual node creates multiple points on the ring
+      for (let j = 0; j < POINTS_PER_VNODE; j++) {
+        const virtualKey = `${workerId}-${i}-${j}`;
+        const hashValue = this.hash(virtualKey);
 
-      const virtualNode: VirtualNode = {
-        workerId,
-        hashValue,
-        virtualIndex: i,
-      };
+        const virtualNode: VirtualNode = {
+          workerId,
+          hashValue,
+          virtualIndex: i * POINTS_PER_VNODE + j,
+        };
 
-      // Insert in sorted order
-      this.insertSorted(virtualNode);
+        // Insert in sorted order
+        this.insertSorted(virtualNode);
+      }
     }
 
     // Clear cache as assignments may have changed
@@ -210,16 +223,24 @@ export class ConsistentHashRouter {
   // ============================================================================
 
   /**
-   * DJB2 hash function
-   * Fast and provides good distribution
+   * Hash function with MurmurHash3-style mixing
+   * Provides excellent distribution for consistent hashing
    */
   private hash(key: string): number {
-    let hash = 5381;
+    // Initial hash using simple multiplication
+    let h = 0;
     for (let i = 0; i < key.length; i++) {
-      const char = key.charCodeAt(i);
-      hash = ((hash << 5) + hash) ^ char;
+      h = (Math.imul(31, h) + key.charCodeAt(i)) | 0;
     }
-    return Math.abs(hash) >>> 0; // Ensure positive 32-bit integer
+
+    // MurmurHash3 finalizer - provides excellent avalanche effect
+    h ^= h >>> 16;
+    h = Math.imul(h, 0x85ebca6b);
+    h ^= h >>> 13;
+    h = Math.imul(h, 0xc2b2ae35);
+    h ^= h >>> 16;
+
+    return Math.abs(h) >>> 0; // Ensure positive 32-bit integer
   }
 
   /**

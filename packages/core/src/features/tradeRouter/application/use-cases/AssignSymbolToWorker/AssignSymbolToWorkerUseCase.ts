@@ -1,16 +1,13 @@
 /**
  * Use Case: Assign Symbol To Worker
  * Business logic for symbol ownership assignment
- * Supports both manual assignment and consistent hashing
+ * Uses ConsistentHashRouter from workerManagement for unified hash algorithm
  */
 
 import { inject, injectable } from 'inversify';
-import { TRADE_ROUTER_TYPES } from '../../../../../shared/lib/di/bindings/features/tradeRouter/types.js';
-import { WorkerRepository } from '../../../domain/repositories/WorkerRepository.js';
-import {
-  WorkerInfrastructureDrivenPort,
-  SymbolAssignmentUpdate,
-} from '../../../application/ports/out/WorkerInfrastructureDrivenPort.js';
+import { WORKER_MANAGEMENT_TYPES } from '../../../../../shared/lib/di/bindings/features/workerManagement/types.js';
+import type { WorkerPoolPort } from '../../../../workerManagement/application/ports/in/WorkerPoolPort.js';
+import { ConsistentHashRouter } from '../../../../workerManagement/domain/services/ConsistentHashRouter.js';
 import {
   AssignSymbolToWorkerRequest,
   AssignSymbolToWorkerResult,
@@ -19,10 +16,10 @@ import {
 @injectable()
 export class AssignSymbolToWorkerUseCase {
   constructor(
-    @inject(TRADE_ROUTER_TYPES.WorkerRepository)
-    private readonly workerRepository: WorkerRepository,
-    @inject(TRADE_ROUTER_TYPES.WorkerInfrastructureDrivenPort)
-    private readonly workerInfrastructure: WorkerInfrastructureDrivenPort
+    @inject(WORKER_MANAGEMENT_TYPES.WorkerPoolPort)
+    private readonly workerPoolPort: WorkerPoolPort,
+    @inject(WORKER_MANAGEMENT_TYPES.ConsistentHashRouter)
+    private readonly consistentHashRouter: ConsistentHashRouter
   ) {}
 
   /**
@@ -39,32 +36,29 @@ export class AssignSymbolToWorkerUseCase {
         throw new Error(`Invalid symbol format: ${symbol}`);
       }
 
-      // 2. Check current ownership
-      const currentOwners = await this.workerRepository.findWorkersBySymbol(
-        symbol
-      );
+      // 2. Check current ownership using WorkerPoolPort
+      const currentOwner = this.findWorkerBySymbol(symbol);
 
       // Already assigned and not forcing re-assignment
-      if (currentOwners.length > 0 && !force) {
-        const currentOwner = currentOwners[0]; // Take first if multiple (shouldn't happen)
+      if (currentOwner && !force) {
         return {
           success: true,
           symbol,
-          assignedWorkerId: currentOwner.id,
+          assignedWorkerId: currentOwner,
           action: 'already_assigned',
-          message: `Symbol ${symbol} is already assigned to worker ${currentOwner.id}`,
+          message: `Symbol ${symbol} is already assigned to worker ${currentOwner}`,
         };
       }
 
-      // 3. Determine target worker
+      // 3. Determine target worker using ConsistentHashRouter
       let targetWorkerId: string | null;
 
       if (workerId) {
         // Manual assignment specified
         targetWorkerId = workerId;
       } else {
-        // Use consistent hashing to determine optimal worker
-        targetWorkerId = await this.selectWorkerForSymbol(symbol);
+        // Use ConsistentHashRouter for deterministic routing
+        targetWorkerId = this.selectWorkerForSymbol(symbol);
       }
 
       if (!targetWorkerId) {
@@ -77,40 +71,27 @@ export class AssignSymbolToWorkerUseCase {
         };
       }
 
-      // 4. Remove from current owner(s) if re-assigning
-      if (currentOwners.length > 0 && force) {
-        for (const owner of currentOwners) {
-          if (owner.id !== targetWorkerId) {
-            // Remove from old worker
-            await this.workerInfrastructure.updateWorkerAssignments(owner.id, {
-              symbols: [symbol],
-              action: 'remove',
-              removedSymbols: [symbol],
-            });
-          }
+      // 4. Remove from current owner if re-assigning
+      if (currentOwner && force && currentOwner !== targetWorkerId) {
+        const oldWorker = this.workerPoolPort.getWorker(currentOwner);
+        if (oldWorker) {
+          oldWorker.removeSymbol(symbol);
         }
       }
 
       // 5. Assign to target worker
-      await this.workerInfrastructure.updateWorkerAssignments(targetWorkerId, {
-        symbols: [symbol],
-        action: currentOwners.length > 0 && !force ? 'add' : 'replace',
-      });
-
-      // 6. Update repository state (main thread tracking)
-      const targetWorker = await this.workerRepository.findById(targetWorkerId);
+      const targetWorker = this.workerPoolPort.getWorker(targetWorkerId);
       if (targetWorker) {
-        // Update domain state (stateful worker will handle persistence)
-        await this.workerRepository.save(targetWorker);
+        targetWorker.assignSymbol(symbol);
       }
 
-      const action = currentOwners.length > 0 ? 'reassigned' : 'assigned';
+      const action = currentOwner ? 'reassigned' : 'assigned';
 
       return {
         success: true,
         symbol,
         assignedWorkerId: targetWorkerId,
-        action: action as any,
+        action: action as 'assigned' | 'reassigned',
         message: `Symbol ${symbol} ${action} to worker ${targetWorkerId}`,
       };
     } catch (error) {
@@ -119,57 +100,44 @@ export class AssignSymbolToWorkerUseCase {
   }
 
   /**
-   * Select optimal worker for symbol using consistent hashing
-   * PRIVATE: Business logic for worker selection
+   * Find worker that owns a symbol using WorkerPoolPort
    */
-  private async selectWorkerForSymbol(symbol: string): Promise<string | null> {
+  private findWorkerBySymbol(symbol: string): string | null {
+    const workerIds = this.workerPoolPort.getWorkerIds();
+    for (const workerId of workerIds) {
+      const worker = this.workerPoolPort.getWorker(workerId);
+      if (worker?.hasSymbol(symbol)) {
+        return workerId;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Select optimal worker for symbol using ConsistentHashRouter
+   */
+  private selectWorkerForSymbol(symbol: string): string | null {
     try {
-      // Get active workers for load balancing
-      const activeWorkers = await this.workerRepository.findActiveWorkers();
-
-      if (activeWorkers.length === 0) {
-        return null;
-      }
-
-      if (activeWorkers.length === 1) {
-        return activeWorkers[0].id;
-      }
-
-      // Simple consistent hashing: use symbol hash mod worker count
-      const symbolHash = this.simpleHash(symbol);
-      const selectedIndex = symbolHash % activeWorkers.length;
-      const selectedWorkerId = activeWorkers[selectedIndex].id;
-
-      return selectedWorkerId;
-    } catch (error) {
-      return null;
+      const routingResult =
+        this.consistentHashRouter.getWorkerForSymbol(symbol);
+      return routingResult.workerId;
+    } catch {
+      // Fallback if ConsistentHashRouter has no workers
+      const workerIds = this.workerPoolPort.getWorkerIds();
+      if (workerIds.length === 0) return null;
+      return workerIds[0];
     }
   }
 
   /**
    * Validate symbol format
-   * PRIVATE: Business rules for symbol validation
    */
   private isValidSymbol(symbol: string): boolean {
-    // Business rules: symbols should be uppercase, alphanumeric
-    // Allow 3-20 characters to support symbols like 1000PEPEUSDT, 1000SHIBUSDT
     if (!symbol || typeof symbol !== 'string') return false;
-
-    const symbolRegex = /^[A-Z0-9]{3,20}$/;
+    // Allow 3-30 characters to support:
+    // - Regular symbols: BTCUSDT, 1000PEPEUSDT, 1000SHIBUSDT
+    // - Quarterly futures: BTCUSDT_260327, ETHUSDT_260626
+    const symbolRegex = /^[A-Z0-9_]{3,30}$/;
     return symbolRegex.test(symbol);
-  }
-
-  /**
-   * Simple hash function for consistent hashing
-   * PRIVATE: Deterministic hashing for load balancing
-   */
-  private simpleHash(input: string): number {
-    let hash = 0;
-    for (let i = 0; i < input.length; i++) {
-      const char = input.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash; // Convert to 32bit integer
-    }
-    return Math.abs(hash);
   }
 }

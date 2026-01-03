@@ -9,19 +9,14 @@ import { EXCHANGE_MANAGEMENT_TYPES } from '../../../../shared/lib/di/bindings/fe
 import type { ExchangeManagementPort } from '../ports/in/ExchangeManagementPort.js';
 
 // Import use cases
-import type { GetEnabledExchangesUseCase } from '../use-cases/GetEnabledExchanges/GetEnabledExchangesUseCase.js';
 import type { GetAllExchangesUseCase } from '../use-cases/GetAllExchanges/GetAllExchangesUseCase.js';
 import type { GetExchangeUseCase } from '../use-cases/GetExchange/GetExchangeUseCase.js';
 import type { UpdateExchangeUseCase } from '../use-cases/UpdateExchange/UpdateExchangeUseCase.js';
 import type { TestExchangeConnectionUseCase } from '../use-cases/TestExchangeConnection/TestExchangeConnectionUseCase.js';
-import type { ManageExchangeCredentialsUseCase } from '../use-cases/ManageExchangeCredentials/ManageExchangeCredentialsUseCase.js';
 
 @injectable()
 export class ExchangeManagementService implements ExchangeManagementPort {
   constructor(
-    @inject(EXCHANGE_MANAGEMENT_TYPES.GetEnabledExchangesUseCase)
-    private readonly getEnabledExchangesUseCase: GetEnabledExchangesUseCase,
-
     @inject(EXCHANGE_MANAGEMENT_TYPES.GetAllExchangesUseCase)
     private readonly getAllExchangesUseCase: GetAllExchangesUseCase,
 
@@ -32,10 +27,7 @@ export class ExchangeManagementService implements ExchangeManagementPort {
     private readonly updateExchangeUseCase: UpdateExchangeUseCase,
 
     @inject(EXCHANGE_MANAGEMENT_TYPES.TestExchangeConnectionUseCase)
-    private readonly testExchangeConnectionUseCase: TestExchangeConnectionUseCase,
-
-    @inject(EXCHANGE_MANAGEMENT_TYPES.ManageExchangeCredentialsUseCase)
-    private readonly manageExchangeCredentialsUseCase: ManageExchangeCredentialsUseCase
+    private readonly testExchangeConnectionUseCase: TestExchangeConnectionUseCase
   ) {}
 
   // Implement ExchangeManagementPort interface using use cases
@@ -78,23 +70,5 @@ export class ExchangeManagementService implements ExchangeManagementPort {
       enabled: false,
     });
     return response.exchange;
-  }
-
-  async updateCredentials(
-    exchangeId: string,
-    apiKey: string,
-    apiSecret: string
-  ): Promise<any> {
-    const response = await this.manageExchangeCredentialsUseCase.execute({
-      exchangeId,
-      operation: 'set',
-      apiKey,
-      apiSecret,
-    });
-    return response;
-  }
-
-  async testConnection(exchangeId: string): Promise<any> {
-    return this.testExchangeConnectionUseCase.execute({ exchangeId });
   }
 }

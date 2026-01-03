@@ -24,7 +24,6 @@ import {
 } from '@flowtrace/core';
 import type {
   SymbolManagementPort,
-  WorkerAssignmentServicePort,
   CandleProcessingPort,
   ExchangeManagementPort,
   ICache,
@@ -42,14 +41,10 @@ export const BRIDGE_TOKENS = {
 
   // Port In Interfaces (Driving Ports)
   SYMBOL_MANAGEMENT_PORT: 'SymbolManagementPort',
-  WORKER_ASSIGNMENT_SERVICE_PORT: 'WorkerAssignmentServicePort',
   CANDLE_PROCESSING_PORT: 'CandleProcessingPort',
-  // Note: SettingsManagementPort will be added when sync feature is implemented
 
   // Trade Router Ports
   TRADE_ROUTER_PORT: 'TradeRouterPort',
-  WORKER_MANAGER_PORT: 'WorkerManagerPort',
-  ROUTING_SERVICE_PORT: 'RoutingServicePort',
 
   // Worker Management Ports
   WORKER_POOL_PORT: 'WorkerPoolPort',
@@ -155,16 +150,6 @@ export class InversifyBridgeModule {
           );
         },
       },
-      {
-        provide: BRIDGE_TOKENS.WORKER_ASSIGNMENT_SERVICE_PORT,
-        useFactory: () => {
-          return InversifyBridgeModule.safeResolve<WorkerAssignmentServicePort>(
-            container,
-            SYMBOL_MANAGEMENT_TYPES.WorkerAssignmentServicePort,
-            'WorkerAssignmentServicePort'
-          );
-        },
-      },
 
       // ========================================
       // Candle Processing Ports
@@ -188,28 +173,8 @@ export class InversifyBridgeModule {
         useFactory: () => {
           return InversifyBridgeModule.safeResolve(
             container,
-            TRADE_ROUTER_TYPES.TradeRouterService,
-            'TradeRouterService'
-          );
-        },
-      },
-      {
-        provide: BRIDGE_TOKENS.WORKER_MANAGER_PORT,
-        useFactory: () => {
-          return InversifyBridgeModule.safeResolve(
-            container,
-            TRADE_ROUTER_TYPES.WorkerManagerService,
-            'WorkerManagerService'
-          );
-        },
-      },
-      {
-        provide: BRIDGE_TOKENS.ROUTING_SERVICE_PORT,
-        useFactory: () => {
-          return InversifyBridgeModule.safeResolve(
-            container,
-            TRADE_ROUTER_TYPES.RoutingService,
-            'RoutingService'
+            TRADE_ROUTER_TYPES.TradeRouterDrivingPort,
+            'TradeRouterDrivingPort'
           );
         },
       },

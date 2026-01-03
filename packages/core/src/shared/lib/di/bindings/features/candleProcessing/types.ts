@@ -21,11 +21,4 @@ export const CANDLE_PROCESSING_TYPES = {
   // Services
   CandleProcessingService: Symbol.for('CandleProcessingService'),
   StatePersistenceService: Symbol.for('StatePersistenceService'),
-
-  // Domain Services
-  FootprintCalculator: Symbol.for('FootprintCalculator'),
-  TimeframeRollup: Symbol.for('TimeframeRollup'),
-
-  // Repository
-  CandleRepository: Symbol.for('CandleRepository'),
 } as const;

@@ -9,7 +9,11 @@ export { configureSymbolManagement } from '../../shared/lib/di/bindings/features
 export { SYMBOL_MANAGEMENT_TYPES } from '../../shared/lib/di/bindings/features/symbolManagement/types.js';
 
 // Domain
-export { Symbol, SymbolStatus, SymbolConfig } from './domain/entities/Symbol.js';
+export {
+  Symbol,
+  SymbolStatus,
+  SymbolConfig,
+} from './domain/entities/Symbol.js';
 export type { SymbolRepository } from './domain/repositories/SymbolRepository.js';
 export type {
   Exchange,
@@ -24,17 +28,12 @@ export type {
   SymbolManagementPort,
   SyncResult as SymbolSyncResult,
 } from './application/ports/in/SymbolManagementPort.js';
-export type { WorkerAssignmentServicePort } from './application/ports/in/WorkerAssignmentServicePort.js';
 
 // Application - Ports (Outbound)
 // Note: Exchange-related ports moved to exchangeManagement feature
 
 // Application - Services
-export {
-  SymbolManagementService,
-  WorkerAssignmentService,
-  type WorkerAssignment,
-} from './application/services/index.js';
+export { SymbolManagementService } from './application/services/index.js';
 
 // Application - Use Cases
 export { SyncSymbolsFromExchangeUseCase } from './application/use-cases/SyncSymbolsFromExchange/index.js';

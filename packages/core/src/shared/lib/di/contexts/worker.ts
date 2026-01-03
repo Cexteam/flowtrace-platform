@@ -55,8 +55,6 @@ export namespace WorkerThread {
    * Worker thread role: Process trades, calculate footprints, publish events
    *
    * Services bound:
-   * - FootprintCalculator: Pure function service for footprint calculations
-   * - TimeframeRollup: Pure function service for timeframe rollup
    * - ProcessTradeUseCase: Application use case for processing trades
    * - InitializeSymbolUseCase: Application use case for initializing symbols
    * - CandleProcessingService: Main application service

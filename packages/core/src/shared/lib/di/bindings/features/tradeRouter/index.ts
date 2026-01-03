@@ -8,8 +8,7 @@
  * TradeRouter runs exclusively on the main thread and is responsible for:
  * - Routing incoming trades to appropriate worker threads
  * - Managing symbol-to-worker assignments
- * - Balancing load across workers using consistent hashing
- * - Monitoring routing status and worker health
+ * - Providing worker pool management facade for marketData feature
  *
  * Use `configureTradeRouter()` to configure all bindings.
  *
@@ -17,21 +16,14 @@
  *
  * ### Application Services (Inbound Ports)
  * - TradeRouterService: Main application service for trade routing
- * - WorkerManagerService: Service for managing worker assignments
  *
  * ### Use Cases
  * - RouteTradesUseCase: Route trades to appropriate workers
  * - AssignSymbolToWorkerUseCase: Assign symbol to worker thread
  * - RemoveSymbolFromWorkerUseCase: Remove symbol from worker
- * - GetRoutingStatusUseCase: Get current routing status
- * - BalanceWorkersUseCase: Balance load across workers
  *
- * ### Domain Services
- * - RoutingService: Core routing logic with consistent hashing
- *
- * ### Infrastructure
- * - WorkerRepository: Worker state persistence
- * - WorkerInfrastructureDrivenAdapter: Worker infrastructure adapter
+ * Note: Use cases inject workerManagement ports directly:
+ * - WorkerPoolPort, WorkerCommunicationPort, ConsistentHashRouter
  *
  * @example
  * ```typescript
@@ -40,7 +32,6 @@
  * const container = new Container();
  * configureTradeRouter(container);
  * ```
- *
  */
 
 import { Container } from 'inversify';

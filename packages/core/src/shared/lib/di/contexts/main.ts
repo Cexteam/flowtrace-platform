@@ -30,8 +30,6 @@ export namespace MainThread {
    * Main thread role: Aggregate candle data from workers, persist to database
    *
    * Services bound:
-   * - FootprintCalculator: Pure function service for footprint calculations
-   * - TimeframeRollup: Pure function service for timeframe rollup
    * - ProcessTradeUseCase: Application use case for processing trades
    * - InitializeSymbolUseCase: Application use case for initializing symbols
    * - CandleProcessingService: Main application service
@@ -79,15 +77,12 @@ export namespace MainThread {
    *
    * Services bound:
    * - TradeRouterService: Main application service for trade routing
-   * - WorkerManagerService: Service for managing worker assignments
    * - RouteTradesUseCase: Route trades to appropriate workers
    * - AssignSymbolToWorkerUseCase: Assign symbol to worker thread
    * - RemoveSymbolFromWorkerUseCase: Remove symbol from worker
-   * - GetRoutingStatusUseCase: Get current routing status
-   * - BalanceWorkersUseCase: Balance load across workers
-   * - RoutingService: Core routing logic with consistent hashing
-   * - WorkerRepository: Worker state persistence
-   * - WorkerInfrastructureDrivenAdapter: Worker infrastructure adapter
+   *
+   * Note: Use cases inject workerManagement ports directly:
+   * - WorkerPoolPort, WorkerCommunicationPort, ConsistentHashRouter
    *
    * @param container - InversifyJS container
    */
@@ -105,7 +100,6 @@ export namespace MainThread {
    * - WorkerIPCService: Inter-process communication with workers
    * - WorkerHealthMonitorService: Worker health monitoring
    * - SpawnWorkerUseCase: Spawn new worker thread
-   * - SendTradeToWorkerUseCase: Send trade data to worker
    * - CheckWorkerHealthUseCase: Check individual worker health
    * - GetSystemHealthUseCase: Get overall system health status
    * - ConsistentHashRouter: Consistent hashing for load distribution

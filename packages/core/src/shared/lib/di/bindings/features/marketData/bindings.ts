@@ -12,9 +12,7 @@
  * - TradeIngestionService: Main trade ingestion service (inbound port)
  * - AddSymbolsToIngestionUseCase: Add symbols to ingestion
  * - RemoveSymbolsFromIngestionUseCase: Remove symbols from ingestion
- * - GapRecoveryUseCase: Recover missing trade data
  * - BinanceWsTradeStreamAdapter: WebSocket trade stream adapter
- * - BinanceRestApiGapRecoveryAdapter: REST API gap recovery adapter
  *
  */
 
@@ -27,16 +25,13 @@ import { TradeIngestionService } from '../../../../../../features/marketData/app
 // Application Layer - Ports
 import { TradeIngestionPort } from '../../../../../../features/marketData/application/ports/in/TradeIngestionPort.js';
 import { TradeStreamPort } from '../../../../../../features/marketData/application/ports/out/TradeStreamPort.js';
-import { RestApiGapRecoveryPort } from '../../../../../../features/marketData/application/ports/out/RestApiGapRecoveryPort.js';
 
 // Application Layer - Use Cases
 import { AddSymbolsToIngestionUseCase } from '../../../../../../features/marketData/application/use-cases/AddSymbolsToIngestion/AddSymbolsToIngestionUseCase.js';
 import { RemoveSymbolsFromIngestionUseCase } from '../../../../../../features/marketData/application/use-cases/RemoveSymbolsFromIngestion/RemoveSymbolsFromIngestionUseCase.js';
-import { GapRecoveryUseCase } from '../../../../../../features/marketData/application/use-cases/GapRecovery/GapRecoveryUseCase.js';
 
 // Infrastructure Adapters
 import { BinanceWsTradeStreamAdapter } from '../../../../../../features/marketData/infrastructure/adapters/index.js';
-import { BinanceRestApiGapRecoveryAdapter } from '../../../../../../features/marketData/infrastructure/adapters/BinanceRestApiGapRecoveryAdapter.js';
 
 /**
  * Configure MarketData core bindings
@@ -62,11 +57,6 @@ export function configureMarketDataCore(container: Container): void {
     .to(RemoveSymbolsFromIngestionUseCase)
     .inSingletonScope();
 
-  container
-    .bind(MARKET_DATA_TYPES.GapRecoveryUseCase)
-    .to(GapRecoveryUseCase)
-    .inSingletonScope();
-
   // ========================================
   // APPLICATION LAYER - SERVICES (INBOUND PORTS)
   // ========================================
@@ -87,11 +77,5 @@ export function configureMarketDataCore(container: Container): void {
   container
     .bind<TradeStreamPort>(MARKET_DATA_TYPES.TradeStreamPort)
     .to(BinanceWsTradeStreamAdapter)
-    .inSingletonScope();
-
-  // REST API gap recovery adapter
-  container
-    .bind<RestApiGapRecoveryPort>(MARKET_DATA_TYPES.RestApiGapRecoveryPort)
-    .to(BinanceRestApiGapRecoveryAdapter)
     .inSingletonScope();
 }

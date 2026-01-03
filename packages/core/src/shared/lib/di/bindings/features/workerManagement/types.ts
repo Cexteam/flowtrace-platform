@@ -14,7 +14,6 @@ export const WORKER_MANAGEMENT_TYPES = {
 
   // Use Cases
   SpawnWorkerUseCase: Symbol.for('SpawnWorkerUseCase'),
-  SendTradeToWorkerUseCase: Symbol.for('SendTradeToWorkerUseCase'),
   CheckWorkerHealthUseCase: Symbol.for('CheckWorkerHealthUseCase'),
   GetSystemHealthUseCase: Symbol.for('GetSystemHealthUseCase'),
 

@@ -1,12 +1,12 @@
 /**
  * Use Case: Remove Symbol From Worker
  * Business logic for symbol ownership removal and cleanup
+ * Uses WorkerPoolPort from workerManagement directly
  */
 
 import { inject, injectable } from 'inversify';
-import { TRADE_ROUTER_TYPES } from '../../../../../shared/lib/di/bindings/features/tradeRouter/types.js';
-import { WorkerRepository } from '../../../domain/repositories/WorkerRepository.js';
-import { WorkerInfrastructureDrivenPort } from '../../../application/ports/out/WorkerInfrastructureDrivenPort.js';
+import { WORKER_MANAGEMENT_TYPES } from '../../../../../shared/lib/di/bindings/features/workerManagement/types.js';
+import type { WorkerPoolPort } from '../../../../workerManagement/application/ports/in/WorkerPoolPort.js';
 import {
   RemoveSymbolFromWorkerRequest,
   RemoveSymbolFromWorkerResult,
@@ -15,27 +15,24 @@ import {
 @injectable()
 export class RemoveSymbolFromWorkerUseCase {
   constructor(
-    @inject(TRADE_ROUTER_TYPES.WorkerRepository)
-    private readonly workerRepository: WorkerRepository,
-    @inject(TRADE_ROUTER_TYPES.WorkerInfrastructureDrivenPort)
-    private readonly workerInfrastructure: WorkerInfrastructureDrivenPort
+    @inject(WORKER_MANAGEMENT_TYPES.WorkerPoolPort)
+    private readonly workerPoolPort: WorkerPoolPort
   ) {}
 
   async execute(
     request: RemoveSymbolFromWorkerRequest
   ): Promise<RemoveSymbolFromWorkerResult> {
-    const { symbol, workerId, force = false } = request;
+    const { symbol, workerId } = request;
 
     try {
       if (!this.isValidSymbol(symbol)) {
         throw new Error(`Invalid symbol: ${symbol}`);
       }
 
-      const currentOwners = await this.workerRepository.findWorkersBySymbol(
-        symbol
-      );
+      // Find current owner using WorkerPoolPort
+      const currentOwner = this.findWorkerBySymbol(symbol);
 
-      if (currentOwners.length === 0) {
+      if (!currentOwner) {
         return {
           success: true,
           symbol,
@@ -45,32 +42,23 @@ export class RemoveSymbolFromWorkerUseCase {
         };
       }
 
-      let targetWorkerId: string;
-      if (workerId) {
-        const target = currentOwners.find((o) => o.id === workerId);
-        if (!target) {
-          return {
-            success: false,
-            symbol,
-            removedFromWorkerId: workerId,
-            action: 'not_owned_by_specified_worker',
-            message: `Worker ${workerId} doesn't own ${symbol}`,
-          };
-        }
-        targetWorkerId = workerId;
-      } else {
-        targetWorkerId = currentOwners[0].id;
+      // If specific worker requested, verify ownership
+      if (workerId && currentOwner !== workerId) {
+        return {
+          success: false,
+          symbol,
+          removedFromWorkerId: workerId,
+          action: 'not_owned_by_specified_worker',
+          message: `Worker ${workerId} doesn't own ${symbol}`,
+        };
       }
 
-      await this.workerInfrastructure.updateWorkerAssignments(targetWorkerId, {
-        symbols: [symbol],
-        action: 'remove',
-        removedSymbols: [symbol],
-      });
+      const targetWorkerId = workerId || currentOwner;
 
-      const owner = await this.workerRepository.findById(targetWorkerId);
-      if (owner) {
-        await this.workerRepository.save(owner);
+      // Remove symbol from worker via WorkerPoolPort
+      const worker = this.workerPoolPort.getWorker(targetWorkerId);
+      if (worker) {
+        worker.removeSymbol(symbol);
       }
 
       return {
@@ -86,10 +74,26 @@ export class RemoveSymbolFromWorkerUseCase {
     }
   }
 
+  /**
+   * Find worker that owns a symbol using WorkerPoolPort
+   */
+  private findWorkerBySymbol(symbol: string): string | null {
+    const workerIds = this.workerPoolPort.getWorkerIds();
+    for (const workerId of workerIds) {
+      const worker = this.workerPoolPort.getWorker(workerId);
+      if (worker?.hasSymbol(symbol)) {
+        return workerId;
+      }
+    }
+    return null;
+  }
+
   private isValidSymbol(symbol: string): boolean {
     if (!symbol || typeof symbol !== 'string') return false;
-    // Allow 3-20 characters to support symbols like 1000PEPEUSDT, 1000SHIBUSDT
-    const symbolRegex = /^[A-Z0-9]{3,20}$/;
+    // Allow 3-30 characters to support:
+    // - Regular symbols: BTCUSDT, 1000PEPEUSDT, 1000SHIBUSDT
+    // - Quarterly futures: BTCUSDT_260327, ETHUSDT_260626
+    const symbolRegex = /^[A-Z0-9_]{3,30}$/;
     return symbolRegex.test(symbol);
   }
 }

@@ -9,8 +9,6 @@
  * Use `configureCandleProcessingMain()` to configure main thread bindings.
  *
  * Services available in main thread:
- * - FootprintCalculator: Pure function service for footprint calculations
- * - TimeframeRollup: Pure function service for timeframe rollup
  * - ProcessTradeUseCase: Application use case for processing trades
  * - InitializeSymbolUseCase: Application use case for initializing symbols
  * - CandleProcessingService: Main application service
@@ -23,8 +21,6 @@
  * Use `configureCandleProcessingWorker()` to configure worker thread bindings.
  *
  * Services available in worker thread:
- * - FootprintCalculator: Pure function service for footprint calculations
- * - TimeframeRollup: Pure function service for timeframe rollup
  * - ProcessTradeUseCase: Application use case for processing trades
  * - InitializeSymbolUseCase: Application use case for initializing symbols
  * - CandleProcessingService: Main application service

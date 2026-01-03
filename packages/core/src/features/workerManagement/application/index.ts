@@ -48,13 +48,6 @@ export {
 } from './use-cases/SpawnWorker/index.js';
 
 export {
-  SendTradeToWorkerUseCase,
-  SendTradeToWorkerRequest,
-  SendTradeToWorkerResult,
-  TradeData,
-} from './use-cases/SendTradeToWorker/index.js';
-
-export {
   CheckWorkerHealthUseCase,
   CheckWorkerHealthRequest,
   CheckWorkerHealthResult,
