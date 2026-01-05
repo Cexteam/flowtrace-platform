@@ -89,6 +89,22 @@ export class BinanceWsTradeStreamAdapter implements TradeStreamPort {
       this.handleTradeMessage(data);
     });
 
+    // Register reconnect callback to re-subscribe active symbols
+    this.wsManager.setOnReconnect(async () => {
+      if (this.activeSymbols.length > 0) {
+        logger.info(
+          `Re-subscribing to ${this.activeSymbols.length} symbols after reconnect...`
+        );
+        const streams = this.activeSymbols.map(
+          (s) => `${s.toLowerCase()}@trade`
+        );
+        await this.sendSubscribeCommand(streams);
+        logger.info(
+          `Successfully re-subscribed to ${this.activeSymbols.length} symbols`
+        );
+      }
+    });
+
     await this.wsManager.connect();
 
     if (symbols.length > 0) {
@@ -188,6 +204,22 @@ export class BinanceWsTradeStreamAdapter implements TradeStreamPort {
 
     this.wsManager.registerMessageHandler('stream', (data: any) => {
       this.handleTradeMessage(data);
+    });
+
+    // Register reconnect callback to re-subscribe active symbols
+    this.wsManager.setOnReconnect(async () => {
+      if (this.activeSymbols.length > 0) {
+        logger.info(
+          `Re-subscribing to ${this.activeSymbols.length} symbols after reconnect...`
+        );
+        const streams = this.activeSymbols.map(
+          (s) => `${s.toLowerCase()}@trade`
+        );
+        await this.sendSubscribeCommand(streams);
+        logger.info(
+          `Successfully re-subscribed to ${this.activeSymbols.length} symbols`
+        );
+      }
     });
 
     await this.wsManager.connect();
@@ -326,19 +358,23 @@ export class BinanceWsTradeStreamAdapter implements TradeStreamPort {
     this.processingSymbols.add(symbol);
 
     try {
-      const buffer = this.tradeBuffer.get(symbol);
-      if (!buffer || buffer.length === 0) return;
+      // Keep processing until buffer is empty
+      // This handles trades that arrive while we're processing
+      while (true) {
+        const buffer = this.tradeBuffer.get(symbol);
+        if (!buffer || buffer.length === 0) break;
 
-      // Process all buffered trades - send ALL trades to worker for gap detection
-      // MARKET filtering happens in FootprintCandle.applyTrade()
-      const tradesToProcess: Trade[] = [];
-      while (buffer.length > 0) {
-        const trade = buffer.shift()!;
-        tradesToProcess.push(trade);
-      }
+        // Process all buffered trades - send ALL trades to worker for gap detection
+        // MARKET filtering happens in FootprintCandle.applyTrade()
+        const tradesToProcess: Trade[] = [];
+        while (buffer.length > 0) {
+          const trade = buffer.shift()!;
+          tradesToProcess.push(trade);
+        }
 
-      if (tradesToProcess.length > 0) {
-        await this.processTrades(symbol, tradesToProcess);
+        if (tradesToProcess.length > 0) {
+          await this.processTrades(symbol, tradesToProcess);
+        }
       }
     } finally {
       this.processingSymbols.delete(symbol);

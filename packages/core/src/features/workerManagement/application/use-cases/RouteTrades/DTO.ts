@@ -5,7 +5,7 @@
 
 export interface RouteTradesRequest {
   symbol: string;
-  trades: any[];
+  trades: unknown[];
   priority?: 'urgent' | 'normal';
   batchId?: string;
   timestamp?: Date;

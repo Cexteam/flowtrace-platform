@@ -10,7 +10,7 @@
  * 5. Update symbol metadata (tick value, precision, etc.)
  */
 
-import { injectable, inject } from 'inversify';
+import { injectable, inject, optional } from 'inversify';
 import { SymbolRepository } from '../../../domain/repositories/SymbolRepository.js';
 import { Symbol, SymbolStatus } from '../../../domain/entities/Symbol.js';
 import {
@@ -21,8 +21,10 @@ import {
 } from '../../../domain/types/ExchangeMetadata.js';
 import { ExchangeApiClientFactory } from '../../../../exchangeManagement/infrastructure/adapters/api/ExchangeApiClientFactory.js';
 import { ExchangeSymbol } from '../../../../exchangeManagement/application/ports/out/ExchangeApiClient.js';
+import { TradeIngestionPort } from '../../../../marketData/application/ports/in/TradeIngestionPort.js';
 import { SYMBOL_MANAGEMENT_TYPES } from '../../../../../shared/lib/di/bindings/features/symbolManagement/types.js';
 import { EXCHANGE_MANAGEMENT_TYPES } from '../../../../../shared/lib/di/bindings/features/exchangeManagement/types.js';
+import { MARKET_DATA_TYPES } from '../../../../../shared/lib/di/bindings/features/marketData/types.js';
 import { createLogger } from '../../../../../shared/lib/logger/logger.js';
 import { SyncSymbolsInput, SyncResult } from './DTO.js';
 
@@ -35,7 +37,11 @@ export class SyncSymbolsFromExchangeUseCase {
     private symbolRepository: SymbolRepository,
 
     @inject(EXCHANGE_MANAGEMENT_TYPES.ExchangeApiClientFactory)
-    private exchangeFactory: ExchangeApiClientFactory
+    private exchangeFactory: ExchangeApiClientFactory,
+
+    @inject(MARKET_DATA_TYPES.TradeIngestionPort)
+    @optional()
+    private tradeIngestionPort?: TradeIngestionPort
   ) {}
 
   async execute(input: SyncSymbolsInput): Promise<SyncResult> {
@@ -228,12 +234,38 @@ export class SyncSymbolsFromExchangeUseCase {
 
   /**
    * Handle delisted symbol
+   *
+   * Steps:
+   * 1. Remove from pipeline (WebSocket + workers) - non-blocking
+   * 2. Update database status to DELISTED
    */
   private async handleDelistedSymbol(
     dbSymbol: Symbol,
     result: SyncResult
   ): Promise<void> {
     try {
+      // Step 1: Remove from pipeline (WebSocket + workers) - non-blocking
+      if (this.tradeIngestionPort) {
+        try {
+          const status = await this.tradeIngestionPort.getStatus();
+          if (
+            status.isRunning &&
+            status.connectedSymbols.includes(dbSymbol.symbol)
+          ) {
+            await this.tradeIngestionPort.removeSymbols([dbSymbol.symbol]);
+            logger.info(
+              `🔌 Removed delisted symbol ${dbSymbol.symbol} from pipeline`
+            );
+          }
+        } catch (pipelineError) {
+          // Non-blocking: log and continue with DB update
+          logger.warn(
+            `⚠️ Failed to remove delisted symbol ${dbSymbol.symbol} from pipeline (non-fatal): ${pipelineError}`
+          );
+        }
+      }
+
+      // Step 2: Update database
       dbSymbol.markAsDelisted();
       await this.symbolRepository.save(dbSymbol);
       result.delistedSymbols.push(dbSymbol.symbol);

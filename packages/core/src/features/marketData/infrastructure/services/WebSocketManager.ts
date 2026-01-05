@@ -24,7 +24,7 @@ export class WebSocketManager {
   private reconnectAttempts = 0;
   private messageHandlers: Map<string, (data: any) => void> = new Map();
   private heartbeatInterval: NodeJS.Timeout | null = null;
-  private heartbeatMessage: any = { type: 'ping' };
+  private onReconnectCallback?: () => Promise<void>;
 
   constructor(
     private url: string,
@@ -108,6 +108,14 @@ export class WebSocketManager {
   registerMessageHandler(type: string, handler: (data: any) => void): void {
     this.messageHandlers.set(type, handler);
     logger.debug(`Registered handler for message type: ${type}`);
+  }
+
+  /**
+   * Set callback to be called after successful reconnection
+   * Used to re-subscribe to streams after WebSocket reconnects
+   */
+  setOnReconnect(callback: () => Promise<void>): void {
+    this.onReconnectCallback = callback;
   }
 
   /**
@@ -295,6 +303,12 @@ export class WebSocketManager {
     setTimeout(async () => {
       try {
         await this.establishConnection();
+
+        // Call reconnect callback to re-subscribe to streams
+        if (this.onReconnectCallback) {
+          logger.info('Calling reconnect callback to re-subscribe streams...');
+          await this.onReconnectCallback();
+        }
       } catch (error) {
         logger.error(
           `Reconnection attempt ${this.reconnectAttempts} failed`,

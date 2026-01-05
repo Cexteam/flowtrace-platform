@@ -5,7 +5,7 @@
 import {
   WorkerHealthStatus,
   SystemHealthOverview,
-} from '../../ports/in/WorkerHealthMonitorPort.js';
+} from '../../ports/in/WorkerStatusPort.js';
 
 /**
  * Result of getting system health

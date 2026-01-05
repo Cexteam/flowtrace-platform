@@ -1,36 +1,29 @@
 /**
  * Use Case: Remove Symbol From Worker
  * Business logic for symbol ownership removal and cleanup
- * Uses WorkerPoolPort from workerManagement directly
  */
 
-import { inject, injectable } from 'inversify';
-import { WORKER_MANAGEMENT_TYPES } from '../../../../../shared/lib/di/bindings/features/workerManagement/types.js';
-import type { WorkerPoolPort } from '../../../../workerManagement/application/ports/in/WorkerPoolPort.js';
-import {
+import { injectable } from 'inversify';
+import type { WorkerThread } from '../../../domain/entities/WorkerThread.js';
+import type {
   RemoveSymbolFromWorkerRequest,
   RemoveSymbolFromWorkerResult,
 } from './DTO.js';
 
 @injectable()
 export class RemoveSymbolFromWorkerUseCase {
-  constructor(
-    @inject(WORKER_MANAGEMENT_TYPES.WorkerPoolPort)
-    private readonly workerPoolPort: WorkerPoolPort
-  ) {}
-
   async execute(
     request: RemoveSymbolFromWorkerRequest
   ): Promise<RemoveSymbolFromWorkerResult> {
-    const { symbol, workerId } = request;
+    const { symbol, workerId, workers } = request;
 
     try {
       if (!this.isValidSymbol(symbol)) {
         throw new Error(`Invalid symbol: ${symbol}`);
       }
 
-      // Find current owner using WorkerPoolPort
-      const currentOwner = this.findWorkerBySymbol(symbol);
+      // Find current owner
+      const currentOwner = this.findWorkerBySymbol(symbol, workers);
 
       if (!currentOwner) {
         return {
@@ -43,7 +36,7 @@ export class RemoveSymbolFromWorkerUseCase {
       }
 
       // If specific worker requested, verify ownership
-      if (workerId && currentOwner !== workerId) {
+      if (workerId && currentOwner.workerId !== workerId) {
         return {
           success: false,
           symbol,
@@ -53,13 +46,10 @@ export class RemoveSymbolFromWorkerUseCase {
         };
       }
 
-      const targetWorkerId = workerId || currentOwner;
+      const targetWorkerId = workerId || currentOwner.workerId;
 
-      // Remove symbol from worker via WorkerPoolPort
-      const worker = this.workerPoolPort.getWorker(targetWorkerId);
-      if (worker) {
-        worker.removeSymbol(symbol);
-      }
+      // Remove symbol from worker
+      currentOwner.removeSymbol(symbol);
 
       return {
         success: true,
@@ -75,14 +65,15 @@ export class RemoveSymbolFromWorkerUseCase {
   }
 
   /**
-   * Find worker that owns a symbol using WorkerPoolPort
+   * Find worker that owns a symbol
    */
-  private findWorkerBySymbol(symbol: string): string | null {
-    const workerIds = this.workerPoolPort.getWorkerIds();
-    for (const workerId of workerIds) {
-      const worker = this.workerPoolPort.getWorker(workerId);
-      if (worker?.hasSymbol(symbol)) {
-        return workerId;
+  private findWorkerBySymbol(
+    symbol: string,
+    workers: Map<string, WorkerThread>
+  ): WorkerThread | null {
+    for (const worker of workers.values()) {
+      if (worker.hasSymbol(symbol)) {
+        return worker;
       }
     }
     return null;

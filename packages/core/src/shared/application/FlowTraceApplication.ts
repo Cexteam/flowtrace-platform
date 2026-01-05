@@ -31,11 +31,10 @@ import { bootstrapDatabaseLazy } from '../infrastructure/database/index.js';
 import type { DrizzleDatabase } from '../infrastructure/database/drizzle/types.js';
 import type { SymbolManagementPort } from '../../features/symbolManagement/index.js';
 import type {
-  WorkerHealthMonitorPort,
-  WorkerPoolPort,
+  WorkerManagementPort,
   WorkerPoolConfig,
-  WorkerCommunicationPort,
-} from '../../features/workerManagement/application/index.js';
+} from '../../features/workerManagement/application/ports/in/WorkerManagementPort.js';
+import type { WorkerStatusPort } from '../../features/workerManagement/application/ports/in/WorkerStatusPort.js';
 import type { TradeIngestionPort } from '../../features/marketData/application/ports/in/TradeIngestionPort.js';
 import { env } from '../../env/index.js';
 
@@ -108,17 +107,13 @@ export class FlowTraceApplication {
     @optional()
     private tradeIngestion?: TradeIngestionPort,
 
-    @inject(WORKER_MANAGEMENT_TYPES.WorkerHealthMonitorPort)
+    @inject(WORKER_MANAGEMENT_TYPES.WorkerStatusPort)
     @optional()
-    private workerHealthMonitor?: WorkerHealthMonitorPort,
+    private workerStatusPort?: WorkerStatusPort,
 
-    @inject(WORKER_MANAGEMENT_TYPES.WorkerPoolPort)
+    @inject(WORKER_MANAGEMENT_TYPES.WorkerManagementPort)
     @optional()
-    private workerPoolPort?: WorkerPoolPort,
-
-    @inject(WORKER_MANAGEMENT_TYPES.WorkerCommunicationPort)
-    @optional()
-    private workerCommunicationPort?: WorkerCommunicationPort
+    private workerManagementPort?: WorkerManagementPort
   ) {
     // Register shutdown handlers
     this.registerShutdownHandlers();
@@ -227,7 +222,7 @@ export class FlowTraceApplication {
       if (
         this.options.enableWorkerPool &&
         !this.options.enableTradeIngestion &&
-        this.workerPoolPort
+        this.workerManagementPort
       ) {
         logger.info('Initializing worker pool...');
         await this.initializeWorkerPool();
@@ -236,7 +231,7 @@ export class FlowTraceApplication {
         this.options.enableWorkerPool &&
         !this.options.enableTradeIngestion
       ) {
-        logger.warn('Worker pool not available (not bound in container)');
+        logger.warn('Worker management not available (not bound in container)');
       }
 
       // Step 4: Start trade ingestion (this also initializes worker pool if enabled)
@@ -252,13 +247,13 @@ export class FlowTraceApplication {
       }
 
       // Step 5: Start worker health monitoring
-      if (this.options.enableHealthMonitoring && this.workerHealthMonitor) {
+      if (this.options.enableHealthMonitoring && this.workerStatusPort) {
         logger.info('Starting worker health monitoring...');
-        this.workerHealthMonitor.startMonitoring();
+        this.workerStatusPort.startMonitoring();
         logger.info('Worker health monitoring started');
       } else if (this.options.enableHealthMonitoring) {
         logger.warn(
-          'Worker health monitor not available (not bound in container)'
+          'Worker status port not available (not bound in container)'
         );
       }
 
@@ -275,10 +270,10 @@ export class FlowTraceApplication {
           workerPool:
             (this.options.enableWorkerPool ||
               this.options.enableTradeIngestion) &&
-            !!this.workerPoolPort,
+            !!this.workerManagementPort,
           workerCount: this.workerCount,
           healthMonitoring:
-            this.options.enableHealthMonitoring && !!this.workerHealthMonitor,
+            this.options.enableHealthMonitoring && !!this.workerStatusPort,
         },
       });
     } catch (error) {
@@ -319,9 +314,9 @@ export class FlowTraceApplication {
     }
 
     // Stop worker health monitoring
-    if (this.workerHealthMonitor) {
+    if (this.workerStatusPort) {
       try {
-        this.workerHealthMonitor.stopMonitoring();
+        this.workerStatusPort.stopMonitoring();
         logger.info('Worker health monitoring stopped');
       } catch (error) {
         logger.error('Error stopping worker health monitoring', error);
@@ -339,7 +334,7 @@ export class FlowTraceApplication {
     }
 
     // Signal workers to flush dirty states before shutdown
-    if (this.workerPoolPort && this.workerCommunicationPort) {
+    if (this.workerManagementPort) {
       try {
         await this.signalWorkersToFlush();
         logger.info('All workers flushed dirty states');
@@ -349,9 +344,9 @@ export class FlowTraceApplication {
     }
 
     // Shutdown worker pool (terminate all worker threads)
-    if (this.workerPoolPort) {
+    if (this.workerManagementPort) {
       try {
-        await this.workerPoolPort.shutdown();
+        await this.workerManagementPort.shutdown();
         logger.info('Worker pool shutdown complete');
       } catch (error) {
         logger.error('Error shutting down worker pool', error);
@@ -394,10 +389,10 @@ export class FlowTraceApplication {
       workerPoolEnabled:
         (this.options.enableWorkerPool !== false ||
           this.options.enableTradeIngestion !== false) &&
-        !!this.workerPoolPort,
+        !!this.workerManagementPort,
       healthMonitoringEnabled:
         this.options.enableHealthMonitoring !== false &&
-        !!this.workerHealthMonitor,
+        !!this.workerStatusPort,
       workerCount: this.workerCount,
       startedAt: this.startedAt,
     };
@@ -409,8 +404,8 @@ export class FlowTraceApplication {
    *
    */
   private async initializeWorkerPool(): Promise<void> {
-    if (!this.workerPoolPort) {
-      throw new Error('WorkerPoolPort not available');
+    if (!this.workerManagementPort) {
+      throw new Error('WorkerManagementPort not available');
     }
 
     // Use env var or default to 2 workers (same logic as flowtrace)
@@ -422,7 +417,7 @@ export class FlowTraceApplication {
     this.workerCount = numWorkers;
 
     logger.info(
-      `🚀 Initializing ${numWorkers} worker threads via WorkerPoolPort (socketPath: ${socketPath})...`
+      `🚀 Initializing ${numWorkers} worker threads via WorkerManagementPort (socketPath: ${socketPath})...`
     );
 
     try {
@@ -433,12 +428,14 @@ export class FlowTraceApplication {
         readyTimeout: this.options.workerReadyTimeoutMs,
       };
 
-      await this.workerPoolPort.initialize(config);
+      await this.workerManagementPort.initialize(config);
 
-      const status = this.workerPoolPort.getStatus();
-      logger.info(
-        `🚀 Worker pool initialization complete: ${status.healthyWorkers}/${status.totalWorkers} workers healthy`
-      );
+      if (this.workerStatusPort) {
+        const status = this.workerStatusPort.getPoolStatus();
+        logger.info(
+          `🚀 Worker pool initialization complete: ${status.healthyWorkers}/${status.totalWorkers} workers healthy`
+        );
+      }
     } catch (error) {
       logger.error('❌ Failed to initialize worker pool', error);
       throw error;
@@ -490,12 +487,12 @@ export class FlowTraceApplication {
    *
    */
   private async signalWorkersToFlush(): Promise<void> {
-    if (!this.workerPoolPort || !this.workerCommunicationPort) {
-      logger.warn('Worker pool or communication port not available for flush');
+    if (!this.workerManagementPort || !this.workerStatusPort) {
+      logger.warn('Worker management or status port not available for flush');
       return;
     }
 
-    const workerIds = this.workerPoolPort.getWorkerIds();
+    const workerIds = this.workerStatusPort.getWorkerIds();
     if (workerIds.length === 0) {
       logger.debug('No workers to flush');
       return;
@@ -523,7 +520,7 @@ export class FlowTraceApplication {
         }, timeoutMs);
 
         // Send SHUTDOWN message to worker
-        this.workerCommunicationPort!.sendToWorker(workerId, {
+        this.workerManagementPort!.sendToWorker(workerId, {
           id: `shutdown_${workerId}_${Date.now()}`,
           type: 'SHUTDOWN',
           data: { workerId },

@@ -2,13 +2,11 @@ import * as winston from 'winston';
 import * as path from 'path';
 import * as fs from 'fs';
 
-// Get log level from environment with fallback (avoid env validation at import time)
-const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
-const NODE_ENV = process.env.NODE_ENV || 'development';
-
 /**
  * Get the appropriate log directory based on environment
  * Uses LOG_DIR env var if set, otherwise defaults to 'logs' directory
+ *
+ * NOTE: This is called lazily to support late LOG_DIR configuration
  */
 function getLogDirectory(): string {
   // Use LOG_DIR env var if set
@@ -35,46 +33,87 @@ function ensureLogDirectory(logDir: string): boolean {
   }
 }
 
-const logDir = getLogDirectory();
-const canWriteLogs = ensureLogDirectory(logDir);
-const logFilePath = path.join(logDir, 'service.log');
+/**
+ * Create log format
+ */
+function createLogFormat() {
+  return winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.json(),
+    winston.format.printf(({ timestamp, level, message, ...meta }) => {
+      return JSON.stringify({
+        timestamp,
+        level,
+        message,
+        ...meta,
+      });
+    })
+  );
+}
 
-const logFormat = winston.format.combine(
-  winston.format.timestamp(),
-  winston.format.errors({ stack: true }),
-  winston.format.json(),
-  winston.format.printf(({ timestamp, level, message, ...meta }) => {
-    return JSON.stringify({
-      timestamp,
-      level,
-      message,
-      ...meta,
+// Lazy-initialized logger instance
+let _logger: winston.Logger | null = null;
+let _currentLogDir: string | null = null;
+
+/**
+ * Get or create the winston logger instance
+ *
+ * Supports lazy initialization to allow LOG_DIR to be set after module import.
+ * If LOG_DIR changes, the file transport will be reconfigured.
+ */
+function getLogger(): winston.Logger {
+  const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
+  const ENABLE_FILE_LOG = process.env.ENABLE_FILE_LOG !== 'false';
+  const logDir = getLogDirectory();
+
+  // Create logger if not exists or if LOG_DIR changed
+  if (!_logger || _currentLogDir !== logDir) {
+    const canWriteLogs = ensureLogDirectory(logDir);
+    const logFilePath = path.join(logDir, 'service.log');
+    const logFormat = createLogFormat();
+
+    // Console transport
+    const consoleTransport = new winston.transports.Console({
+      level: LOG_LEVEL,
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      ),
     });
-  })
-);
 
-// Console transport for development
-const consoleTransport = new winston.transports.Console({
-  level: LOG_LEVEL,
-  format: winston.format.combine(
-    winston.format.colorize(),
-    winston.format.simple()
-  ),
-});
+    // File transport - enabled by default for debugging
+    const fileTransport = new winston.transports.File({
+      filename: logFilePath,
+      level: LOG_LEVEL,
+      format: logFormat,
+      silent: !canWriteLogs || !ENABLE_FILE_LOG,
+    });
 
-// File transport for production (only if we can write logs)
-const fileTransport = new winston.transports.File({
-  filename: logFilePath,
-  level: 'error',
-  format: logFormat,
-  silent: !canWriteLogs || NODE_ENV !== 'production',
-});
+    // If logger exists but LOG_DIR changed, close old transports
+    if (_logger && _currentLogDir !== logDir) {
+      _logger.close();
+    }
 
-export const logger = winston.createLogger({
-  level: LOG_LEVEL,
-  format: logFormat,
-  transports: [consoleTransport, fileTransport],
-});
+    _logger = winston.createLogger({
+      level: LOG_LEVEL,
+      format: logFormat,
+      transports: [consoleTransport, fileTransport],
+    });
+
+    _currentLogDir = logDir;
+  }
+
+  return _logger;
+}
+
+// Export a proxy that delegates to the lazy-initialized logger
+export const logger = {
+  info: (message: string, meta?: any) => getLogger().info(message, meta),
+  error: (message: string, meta?: any) => getLogger().error(message, meta),
+  warn: (message: string, meta?: any) => getLogger().warn(message, meta),
+  debug: (message: string, meta?: any) => getLogger().debug(message, meta),
+};
 
 // Add helper methods for structured logging
 export class LoggerService {

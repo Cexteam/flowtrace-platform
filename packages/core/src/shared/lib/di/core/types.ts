@@ -63,7 +63,6 @@ export const CORE_TYPES = {
 // Feature-Specific Types - Import directly from types files (no side effects)
 // ============================================================================
 import { MARKET_DATA_TYPES } from '../bindings/features/marketData/types.js';
-import { TRADE_ROUTER_TYPES } from '../bindings/features/tradeRouter/types.js';
 import { SYMBOL_MANAGEMENT_TYPES } from '../bindings/features/symbolManagement/types.js';
 import { CANDLE_PROCESSING_TYPES } from '../bindings/features/candleProcessing/types.js';
 import { WORKER_MANAGEMENT_TYPES } from '../bindings/features/workerManagement/types.js';
@@ -72,7 +71,6 @@ import { DATABASE_SYMBOLS } from '../bindings/core/database/types.js';
 
 // Re-export for direct access
 export { MARKET_DATA_TYPES } from '../bindings/features/marketData/types.js';
-export { TRADE_ROUTER_TYPES } from '../bindings/features/tradeRouter/types.js';
 export { SYMBOL_MANAGEMENT_TYPES } from '../bindings/features/symbolManagement/types.js';
 export { CANDLE_PROCESSING_TYPES } from '../bindings/features/candleProcessing/types.js';
 export { WORKER_MANAGEMENT_TYPES } from '../bindings/features/workerManagement/types.js';
@@ -90,9 +88,6 @@ export const TYPES = {
 
   // Market data types (delegated to MARKET_DATA_TYPES)
   ...MARKET_DATA_TYPES,
-
-  // Trade Router types (delegated to TRADE_ROUTER_TYPES)
-  ...TRADE_ROUTER_TYPES,
 
   // Symbol Management types (delegated to SYMBOL_MANAGEMENT_TYPES)
   ...SYMBOL_MANAGEMENT_TYPES,

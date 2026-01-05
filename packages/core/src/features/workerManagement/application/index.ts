@@ -4,28 +4,32 @@
  * Export ports, services, and use cases.
  */
 
-// Ports - In
-export {
-  WorkerPoolPort,
-  WorkerPoolStatus,
-  WorkerPoolConfig,
-} from './ports/in/WorkerPoolPort.js';
+// ============================================================================
+// Ports - In (New unified ports)
+// ============================================================================
 
 export {
-  WorkerCommunicationPort,
+  WorkerManagementPort,
+  WorkerPoolConfig,
   WorkerMessage,
   WorkerResponse,
   WorkerMessageType,
   SendMessageOptions,
-} from './ports/in/WorkerCommunicationPort.js';
+  RouteTradesResult,
+  InitializeSymbolRoutingResult,
+} from './ports/in/WorkerManagementPort.js';
 
 export {
-  WorkerHealthMonitorPort,
+  WorkerStatusPort,
+  WorkerPoolStatus,
   WorkerHealthStatus,
   SystemHealthOverview,
-} from './ports/in/WorkerHealthMonitorPort.js';
+} from './ports/in/WorkerStatusPort.js';
 
+// ============================================================================
 // Ports - Out
+// ============================================================================
+
 export {
   WorkerThreadPort,
   WorkerSpawnConfig,
@@ -35,12 +39,17 @@ export {
   ExitHandler,
 } from './ports/out/WorkerThreadPort.js';
 
-// Services
-export { WorkerPoolService } from './services/WorkerPoolService.js';
-export { WorkerIPCService } from './services/WorkerIPCService.js';
-export { WorkerHealthMonitorService } from './services/WorkerHealthMonitorService.js';
+// ============================================================================
+// Services (New unified services)
+// ============================================================================
 
-// Use Cases
+export { WorkerManagementService } from './services/WorkerManagementService.js';
+export { WorkerStatusService } from './services/WorkerStatusService.js';
+
+// ============================================================================
+// Use Cases (existing)
+// ============================================================================
+
 export {
   SpawnWorkerUseCase,
   SpawnWorkerRequest,
@@ -61,3 +70,27 @@ export {
   GetAllWorkersHealthStatusResult,
   GetUnhealthyWorkersResult,
 } from './use-cases/GetSystemHealth/index.js';
+
+// ============================================================================
+// Use Cases (moved from tradeRouter)
+// ============================================================================
+
+export {
+  RouteTradesUseCase,
+  RouteTradesRequest,
+  RouteTradesResult as RouteTradesUseCaseResult,
+  RouteTradesSuccess,
+  RouteTradesError,
+} from './use-cases/RouteTrades/index.js';
+
+export {
+  AssignSymbolToWorkerUseCase,
+  AssignSymbolToWorkerRequest,
+  AssignSymbolToWorkerResult,
+} from './use-cases/AssignSymbolToWorker/index.js';
+
+export {
+  RemoveSymbolFromWorkerUseCase,
+  RemoveSymbolFromWorkerRequest,
+  RemoveSymbolFromWorkerResult,
+} from './use-cases/RemoveSymbolFromWorker/index.js';

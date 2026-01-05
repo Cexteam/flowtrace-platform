@@ -4,8 +4,7 @@
  * Available features:
  * - CandleProcessing: Aggregates candle data from workers
  * - SymbolManagement: Manages trading symbols and sync
- * - TradeRouter: Routes trades to workers
- * - WorkerManagement: Manages worker pool lifecycle
+ * - WorkerManagement: Manages worker pool lifecycle, trade routing, and health monitoring
  * - MarketData: Ingests trade data from exchanges
  * - ExchangeManagement: Manages exchange configurations
  *
@@ -14,7 +13,6 @@
 import { Container } from 'inversify';
 import { configureCandleProcessingMain } from '../bindings/features/candleProcessing/index.js';
 import { configureSymbolManagement as configureSymbolManagementFeature } from '../bindings/features/symbolManagement/index.js';
-import { configureTradeRouter as configureTradeRouterFeature } from '../bindings/features/tradeRouter/index.js';
 import { configureWorkerManagement as configureWorkerManagementFeature } from '../bindings/features/workerManagement/index.js';
 import { configureMarketData as configureMarketDataFeature } from '../bindings/features/marketData/index.js';
 import { configureExchangeManagement as configureExchangeManagementFeature } from '../bindings/features/exchangeManagement/index.js';
@@ -71,37 +69,19 @@ export namespace MainThread {
   }
 
   /**
-   * Configure TradeRouter for main thread
-   *
-   * Main thread only: Routes trades to appropriate workers
-   *
-   * Services bound:
-   * - TradeRouterService: Main application service for trade routing
-   * - RouteTradesUseCase: Route trades to appropriate workers
-   * - AssignSymbolToWorkerUseCase: Assign symbol to worker thread
-   * - RemoveSymbolFromWorkerUseCase: Remove symbol from worker
-   *
-   * Note: Use cases inject workerManagement ports directly:
-   * - WorkerPoolPort, WorkerCommunicationPort, ConsistentHashRouter
-   *
-   * @param container - InversifyJS container
-   */
-  export function configureTradeRouter(container: Container): void {
-    configureTradeRouterFeature(container);
-  }
-
-  /**
    * Configure WorkerManagement for main thread
    *
-   * Main thread only: Manages worker pool, health monitoring
+   * Main thread only: Manages worker pool, trade routing, and health monitoring
    *
    * Services bound:
-   * - WorkerPoolService: Worker pool lifecycle management
-   * - WorkerIPCService: Inter-process communication with workers
-   * - WorkerHealthMonitorService: Worker health monitoring
+   * - WorkerManagementService: Unified service for worker lifecycle, communication, and routing
+   * - WorkerStatusService: Worker status and health monitoring
    * - SpawnWorkerUseCase: Spawn new worker thread
    * - CheckWorkerHealthUseCase: Check individual worker health
    * - GetSystemHealthUseCase: Get overall system health status
+   * - RouteTradesUseCase: Route trades to appropriate workers
+   * - AssignSymbolToWorkerUseCase: Assign symbol to worker thread
+   * - RemoveSymbolFromWorkerUseCase: Remove symbol from worker
    * - ConsistentHashRouter: Consistent hashing for load distribution
    * - NodeWorkerThreadAdapter: Node.js worker thread adapter
    *

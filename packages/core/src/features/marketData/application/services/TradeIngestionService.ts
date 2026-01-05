@@ -1,6 +1,8 @@
 import { injectable, inject } from 'inversify';
-import { TYPES } from '../../../../shared/lib/di/core/types.js';
-import { TradeRouterDrivingPort } from '../../../tradeRouter/application/ports/in/TradeRouterDrivingPort.js';
+import { WORKER_MANAGEMENT_TYPES } from '../../../../shared/lib/di/bindings/features/workerManagement/types.js';
+import { MARKET_DATA_TYPES } from '../../../../shared/lib/di/bindings/features/marketData/types.js';
+import { WorkerManagementPort } from '../../../workerManagement/application/ports/in/WorkerManagementPort.js';
+import { WorkerStatusPort } from '../../../workerManagement/application/ports/in/WorkerStatusPort.js';
 import {
   AddSymbolsToIngestionUseCase,
   RemoveSymbolsFromIngestionUseCase,
@@ -33,7 +35,7 @@ const logger = createLogger('TradeIngestionService');
  * Ultra-minimal architecture: Direct routing to worker-owned footprint logic
  *
  * ✅ DRIVING PORT IMPLEMENTATION: External actors call application through this interface
- * ✅ CLEAN ARCHITECTURE: Only imports from tradeRouter, not workerManagement
+ * ✅ CLEAN ARCHITECTURE: Uses WorkerManagementPort and WorkerStatusPort
  */
 @injectable()
 export class TradeIngestionService implements TradeIngestionPort {
@@ -43,13 +45,20 @@ export class TradeIngestionService implements TradeIngestionPort {
   constructor(
     @inject(SYMBOL_MANAGEMENT_TYPES.SymbolRepository)
     private symbolRepository: SymbolRepository,
-    @inject(TYPES.TradeRouterDrivingPort)
-    private tradeRouterPort: TradeRouterDrivingPort,
-    @inject(TYPES.AddSymbolsToIngestionUseCase)
+
+    @inject(WORKER_MANAGEMENT_TYPES.WorkerManagementPort)
+    private workerManagementPort: WorkerManagementPort,
+
+    @inject(WORKER_MANAGEMENT_TYPES.WorkerStatusPort)
+    private workerStatusPort: WorkerStatusPort,
+
+    @inject(MARKET_DATA_TYPES.AddSymbolsToIngestionUseCase)
     private addSymbolsUseCase: AddSymbolsToIngestionUseCase,
-    @inject(TYPES.RemoveSymbolsFromIngestionUseCase)
+
+    @inject(MARKET_DATA_TYPES.RemoveSymbolsFromIngestionUseCase)
     private removeSymbolsUseCase: RemoveSymbolsFromIngestionUseCase,
-    @inject(TYPES.TradeStreamPort)
+
+    @inject(MARKET_DATA_TYPES.TradeStreamPort)
     private tradeStreamPort: TradeStreamPort
   ) {}
 
@@ -73,21 +82,21 @@ export class TradeIngestionService implements TradeIngestionPort {
     try {
       logger.info('Starting trade ingestion service...');
 
-      // ✅ PHASE 0: Initialize worker pool via tradeRouterPort
+      // ✅ PHASE 0: Initialize worker pool via WorkerManagementPort
       const numWorkers = env.WORKER_THREADS_COUNT || 2;
       const socketPath =
         env.IPC_SOCKET_PATH || '/tmp/flowtrace-persistence.sock';
 
       logger.info(
-        `🚀 Initializing ${numWorkers} worker threads via TradeRouterPort (socketPath: ${socketPath})...`
+        `🚀 Initializing ${numWorkers} worker threads via WorkerManagementPort (socketPath: ${socketPath})...`
       );
 
-      await this.tradeRouterPort.initializeWorkerPool({
+      await this.workerManagementPort.initialize({
         workerCount: numWorkers,
         socketPath,
       });
 
-      const status = this.tradeRouterPort.getWorkerPoolStatus();
+      const status = this.workerStatusPort.getPoolStatus();
       logger.info(
         `🚀 Worker pool initialization complete: ${status.healthyWorkers}/${status.totalWorkers} workers healthy`
       );
@@ -104,7 +113,7 @@ export class TradeIngestionService implements TradeIngestionPort {
         );
 
         // Still need to initialize workers with socketPath for dynamic symbol addition
-        await this.tradeRouterPort.initializeSymbolRouting([], socketPath);
+        await this.workerManagementPort.initializeSymbolRouting([], socketPath);
 
         // Register trade callback for when symbols are added dynamically
         this.tradeStreamPort.setTradeCallback((trades: Trades) => {
@@ -130,12 +139,13 @@ export class TradeIngestionService implements TradeIngestionPort {
         };
       }
 
-      // ✅ PHASE 2: Initialize symbol routing to workers via tradeRouterPort
+      // ✅ PHASE 2: Initialize symbol routing to workers via WorkerManagementPort
       logger.info('Initializing symbol routing...');
-      const routingResult = await this.tradeRouterPort.initializeSymbolRouting(
-        activeSymbols,
-        socketPath
-      );
+      const routingResult =
+        await this.workerManagementPort.initializeSymbolRouting(
+          activeSymbols,
+          socketPath
+        );
       logger.info(
         `Symbol routing initialized: ${routingResult.assignedSymbols}/${activeSymbols.length} symbols assigned`
       );
@@ -402,7 +412,7 @@ export class TradeIngestionService implements TradeIngestionPort {
     trades: Trades
   ): Promise<void> {
     try {
-      await this.tradeRouterPort.routeTrades(symbol, trades, {
+      await this.workerManagementPort.routeTrades(symbol, trades, {
         priority: 'normal',
       });
     } catch (error) {

@@ -2,26 +2,45 @@
  * WorkerManagement Feature DI Types
  *
  * Defines dependency injection symbols for the workerManagement feature.
- *
  */
 
 export const WORKER_MANAGEMENT_TYPES = {
-  // Ports (Interfaces)
-  WorkerPoolPort: Symbol.for('WorkerPoolPort'),
-  WorkerCommunicationPort: Symbol.for('WorkerCommunicationPort'),
-  WorkerThreadPort: Symbol.for('WorkerThreadPort'),
-  WorkerHealthMonitorPort: Symbol.for('WorkerHealthMonitorPort'),
+  // ========================================
+  // PORTS (Interfaces)
+  // ========================================
 
-  // Use Cases
+  // New unified ports
+  WorkerManagementPort: Symbol.for('WorkerManagementPort'),
+  WorkerStatusPort: Symbol.for('WorkerStatusPort'),
+
+  // Infrastructure port
+  WorkerThreadPort: Symbol.for('WorkerThreadPort'),
+
+  // ========================================
+  // USE CASES
+  // ========================================
+
+  // Existing use cases
   SpawnWorkerUseCase: Symbol.for('SpawnWorkerUseCase'),
   CheckWorkerHealthUseCase: Symbol.for('CheckWorkerHealthUseCase'),
   GetSystemHealthUseCase: Symbol.for('GetSystemHealthUseCase'),
 
-  // Services
-  WorkerPoolService: Symbol.for('WorkerPoolService'),
-  WorkerIPCService: Symbol.for('WorkerIPCService'),
-  WorkerHealthMonitorService: Symbol.for('WorkerHealthMonitorService'),
+  // Use cases moved from tradeRouter
+  RouteTradesUseCase: Symbol.for('RouteTradesUseCase'),
+  AssignSymbolToWorkerUseCase: Symbol.for('AssignSymbolToWorkerUseCase'),
+  RemoveSymbolFromWorkerUseCase: Symbol.for('RemoveSymbolFromWorkerUseCase'),
 
-  // Domain Services
+  // ========================================
+  // SERVICES
+  // ========================================
+
+  // New unified services
+  WorkerManagementService: Symbol.for('WorkerManagementService'),
+  WorkerStatusService: Symbol.for('WorkerStatusService'),
+
+  // ========================================
+  // DOMAIN SERVICES
+  // ========================================
+
   ConsistentHashRouter: Symbol.for('ConsistentHashRouter'),
 } as const;

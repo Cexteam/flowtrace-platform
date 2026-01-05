@@ -1,7 +1,8 @@
 import { inject, injectable } from 'inversify';
-import { TYPES } from '../../../../../shared/lib/di/core/types.js';
+import { MARKET_DATA_TYPES } from '../../../../../shared/lib/di/bindings/features/marketData/types.js';
+import { WORKER_MANAGEMENT_TYPES } from '../../../../../shared/lib/di/bindings/features/workerManagement/types.js';
 import { TradeStreamPort } from '../../../application/ports/out/TradeStreamPort.js';
-import { TradeRouterDrivingPort } from '../../../../tradeRouter/application/ports/in/TradeRouterDrivingPort.js';
+import { WorkerManagementPort } from '../../../../workerManagement/application/ports/in/WorkerManagementPort.js';
 import { createLogger } from '../../../../../shared/lib/logger/logger.js';
 import type {
   RemoveSymbolsFromIngestionRequest,
@@ -13,10 +14,10 @@ const logger = createLogger('RemoveSymbolsFromIngestionUseCase');
 @injectable()
 export class RemoveSymbolsFromIngestionUseCase {
   constructor(
-    @inject(TYPES.TradeStreamPort)
+    @inject(MARKET_DATA_TYPES.TradeStreamPort)
     private tradeStreamPort: TradeStreamPort,
-    @inject(TYPES.TradeRouterDrivingPort)
-    private tradeRouterPort: TradeRouterDrivingPort
+    @inject(WORKER_MANAGEMENT_TYPES.WorkerManagementPort)
+    private workerManagementPort: WorkerManagementPort
   ) {}
 
   async execute(
@@ -113,7 +114,7 @@ export class RemoveSymbolsFromIngestionUseCase {
 
       // Step 2: Remove symbol from worker assignment
       try {
-        await this.tradeRouterPort.removeSymbolFromWorker(symbol);
+        await this.workerManagementPort.removeSymbolFromWorker(symbol);
         logger.debug(`Successfully removed symbol ${symbol} from worker`);
       } catch (removeError) {
         logger.warn(

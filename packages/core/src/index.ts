@@ -108,28 +108,24 @@ export {
   EXCHANGE_MANAGEMENT_TYPES,
 } from './features/exchangeManagement/index.js';
 
-// Trade Router Feature
-import * as TradeRouter from './features/tradeRouter/index.js';
-export { TradeRouter };
-
-export { TradeRouterService } from './features/tradeRouter/index.js';
-
-export type {
-  TradeRouterDrivingPort,
-  InitializeSymbolRoutingResult,
-} from './features/tradeRouter/index.js';
-
 // Worker Management Feature
 import * as WorkerManagement from './features/workerManagement/index.js';
 export { WorkerManagement };
 
+export {
+  WorkerManagementService,
+  WorkerStatusService,
+} from './features/workerManagement/application/index.js';
+
 export type {
-  WorkerPoolPort,
-  WorkerPoolStatus,
+  WorkerManagementPort,
   WorkerPoolConfig,
-  WorkerHealthMonitorPort,
+  WorkerPoolStatus,
+  WorkerStatusPort,
   WorkerHealthStatus,
   SystemHealthOverview,
+  RouteTradesResult,
+  InitializeSymbolRoutingResult,
 } from './features/workerManagement/application/index.js';
 
 // Exchange Management Feature

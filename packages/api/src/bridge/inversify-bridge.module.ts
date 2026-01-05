@@ -17,7 +17,6 @@ import type { Container } from 'inversify';
 import {
   SYMBOL_MANAGEMENT_TYPES,
   CANDLE_PROCESSING_TYPES,
-  TRADE_ROUTER_TYPES,
   WORKER_MANAGEMENT_TYPES,
   EXCHANGE_MANAGEMENT_TYPES,
   CACHE_TOKEN,
@@ -26,6 +25,8 @@ import type {
   SymbolManagementPort,
   CandleProcessingPort,
   ExchangeManagementPort,
+  WorkerManagementPort,
+  WorkerStatusPort,
   ICache,
 } from '@flowtrace/core';
 
@@ -43,12 +44,9 @@ export const BRIDGE_TOKENS = {
   SYMBOL_MANAGEMENT_PORT: 'SymbolManagementPort',
   CANDLE_PROCESSING_PORT: 'CandleProcessingPort',
 
-  // Trade Router Ports
-  TRADE_ROUTER_PORT: 'TradeRouterPort',
-
-  // Worker Management Ports
-  WORKER_POOL_PORT: 'WorkerPoolPort',
-  WORKER_HEALTH_MONITOR_PORT: 'WorkerHealthMonitorPort',
+  // Worker Management Ports (new unified ports)
+  WORKER_MANAGEMENT_PORT: 'WorkerManagementPort',
+  WORKER_STATUS_PORT: 'WorkerStatusPort',
 
   // Exchange Management Ports
   EXCHANGE_MANAGEMENT_PORT: 'ExchangeManagementPort',
@@ -166,39 +164,25 @@ export class InversifyBridgeModule {
       },
 
       // ========================================
-      // Trade Router Ports
+      // Worker Management Ports (new unified ports)
       // ========================================
       {
-        provide: BRIDGE_TOKENS.TRADE_ROUTER_PORT,
+        provide: BRIDGE_TOKENS.WORKER_MANAGEMENT_PORT,
         useFactory: () => {
-          return InversifyBridgeModule.safeResolve(
+          return InversifyBridgeModule.safeResolve<WorkerManagementPort>(
             container,
-            TRADE_ROUTER_TYPES.TradeRouterDrivingPort,
-            'TradeRouterDrivingPort'
-          );
-        },
-      },
-
-      // ========================================
-      // Worker Management Ports
-      // ========================================
-      {
-        provide: BRIDGE_TOKENS.WORKER_POOL_PORT,
-        useFactory: () => {
-          return InversifyBridgeModule.safeResolve(
-            container,
-            WORKER_MANAGEMENT_TYPES.WorkerPoolPort,
-            'WorkerPoolPort'
+            WORKER_MANAGEMENT_TYPES.WorkerManagementPort,
+            'WorkerManagementPort'
           );
         },
       },
       {
-        provide: BRIDGE_TOKENS.WORKER_HEALTH_MONITOR_PORT,
+        provide: BRIDGE_TOKENS.WORKER_STATUS_PORT,
         useFactory: () => {
-          return InversifyBridgeModule.safeResolve(
+          return InversifyBridgeModule.safeResolve<WorkerStatusPort>(
             container,
-            WORKER_MANAGEMENT_TYPES.WorkerHealthMonitorPort,
-            'WorkerHealthMonitorPort'
+            WORKER_MANAGEMENT_TYPES.WorkerStatusPort,
+            'WorkerStatusPort'
           );
         },
       },

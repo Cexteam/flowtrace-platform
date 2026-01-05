@@ -20,7 +20,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Inject, Logger, Optional } from '@nestjs/common';
 import { BRIDGE_TOKENS } from '../../../bridge/index.js';
-import type { WorkerPoolPort, WorkerHealthMonitorPort } from '@flowtrace/core';
+import type { WorkerStatusPort } from '@flowtrace/core';
 
 /**
  * Worker status update message
@@ -80,11 +80,8 @@ export class StatusGateway
 
   constructor(
     @Optional()
-    @Inject(BRIDGE_TOKENS.WORKER_POOL_PORT)
-    private readonly workerPoolPort: WorkerPoolPort | null,
-    @Optional()
-    @Inject(BRIDGE_TOKENS.WORKER_HEALTH_MONITOR_PORT)
-    private readonly workerHealthMonitorPort: WorkerHealthMonitorPort | null
+    @Inject(BRIDGE_TOKENS.WORKER_STATUS_PORT)
+    private readonly workerStatusPort: WorkerStatusPort | null
   ) {}
 
   afterInit(_server: Server): void {
@@ -307,12 +304,12 @@ export class StatusGateway
    * Send initial worker status to a newly subscribed client
    */
   private sendInitialWorkerStatus(client: Socket, workerId?: string): void {
-    if (!this.workerPoolPort) {
+    if (!this.workerStatusPort) {
       return;
     }
 
     try {
-      const status = this.workerPoolPort.getStatus();
+      const status = this.workerStatusPort.getPoolStatus();
 
       if (workerId) {
         // Send specific worker status
@@ -389,12 +386,12 @@ export class StatusGateway
    * Poll worker status and broadcast updates
    */
   private pollAndBroadcastWorkerStatus(): void {
-    if (!this.workerPoolPort) {
+    if (!this.workerStatusPort) {
       return;
     }
 
     try {
-      const status = this.workerPoolPort.getStatus();
+      const status = this.workerStatusPort.getPoolStatus();
 
       // Broadcast each worker's status
       for (const worker of status.workers) {

@@ -88,7 +88,13 @@ export function UpdatedGroupCandles(
       _.floor(iCandle.t) - _.floor(iCandle.t % (resolution * 1000));
 
     if (opentime > currentCandle.t) {
-      // New period started - reset candle with completed candle data
+      // New period started - first complete the OLD candle if it has data
+      if (currentCandle.t > 0 && currentCandle.n > 0) {
+        currentCandle.x = true;
+        completedCandles.push(currentCandle.clone());
+      }
+
+      // Then reset candle with new period data
       // Matching original: dataSymbols[i] = { ... }
       currentCandle.e = 'CANDLESTICK';
       currentCandle.tz = 'UTC';

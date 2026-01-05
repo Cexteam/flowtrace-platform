@@ -8,5 +8,5 @@ export type {
   RouteTradesRequest,
   RouteTradesResult,
   RouteTradesSuccess,
-  RouteTradesError
+  RouteTradesError,
 } from './DTO.js';

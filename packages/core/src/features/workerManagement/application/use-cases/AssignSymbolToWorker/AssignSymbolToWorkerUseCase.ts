@@ -1,14 +1,14 @@
 /**
  * Use Case: Assign Symbol To Worker
  * Business logic for symbol ownership assignment
- * Uses ConsistentHashRouter from workerManagement for unified hash algorithm
+ * Uses ConsistentHashRouter for unified hash algorithm
  */
 
 import { inject, injectable } from 'inversify';
 import { WORKER_MANAGEMENT_TYPES } from '../../../../../shared/lib/di/bindings/features/workerManagement/types.js';
-import type { WorkerPoolPort } from '../../../../workerManagement/application/ports/in/WorkerPoolPort.js';
-import { ConsistentHashRouter } from '../../../../workerManagement/domain/services/ConsistentHashRouter.js';
-import {
+import { ConsistentHashRouter } from '../../../domain/services/ConsistentHashRouter.js';
+import type { WorkerThread } from '../../../domain/entities/WorkerThread.js';
+import type {
   AssignSymbolToWorkerRequest,
   AssignSymbolToWorkerResult,
 } from './DTO.js';
@@ -16,8 +16,6 @@ import {
 @injectable()
 export class AssignSymbolToWorkerUseCase {
   constructor(
-    @inject(WORKER_MANAGEMENT_TYPES.WorkerPoolPort)
-    private readonly workerPoolPort: WorkerPoolPort,
     @inject(WORKER_MANAGEMENT_TYPES.ConsistentHashRouter)
     private readonly consistentHashRouter: ConsistentHashRouter
   ) {}
@@ -28,7 +26,7 @@ export class AssignSymbolToWorkerUseCase {
   async execute(
     request: AssignSymbolToWorkerRequest
   ): Promise<AssignSymbolToWorkerResult> {
-    const { symbol, workerId, force = false } = request;
+    const { symbol, workerId, force = false, workers } = request;
 
     try {
       // 1. Validate symbol format
@@ -36,17 +34,17 @@ export class AssignSymbolToWorkerUseCase {
         throw new Error(`Invalid symbol format: ${symbol}`);
       }
 
-      // 2. Check current ownership using WorkerPoolPort
-      const currentOwner = this.findWorkerBySymbol(symbol);
+      // 2. Check current ownership
+      const currentOwner = this.findWorkerBySymbol(symbol, workers);
 
       // Already assigned and not forcing re-assignment
       if (currentOwner && !force) {
         return {
           success: true,
           symbol,
-          assignedWorkerId: currentOwner,
+          assignedWorkerId: currentOwner.workerId,
           action: 'already_assigned',
-          message: `Symbol ${symbol} is already assigned to worker ${currentOwner}`,
+          message: `Symbol ${symbol} is already assigned to worker ${currentOwner.workerId}`,
         };
       }
 
@@ -58,7 +56,7 @@ export class AssignSymbolToWorkerUseCase {
         targetWorkerId = workerId;
       } else {
         // Use ConsistentHashRouter for deterministic routing
-        targetWorkerId = this.selectWorkerForSymbol(symbol);
+        targetWorkerId = this.selectWorkerForSymbol(symbol, workers);
       }
 
       if (!targetWorkerId) {
@@ -72,15 +70,12 @@ export class AssignSymbolToWorkerUseCase {
       }
 
       // 4. Remove from current owner if re-assigning
-      if (currentOwner && force && currentOwner !== targetWorkerId) {
-        const oldWorker = this.workerPoolPort.getWorker(currentOwner);
-        if (oldWorker) {
-          oldWorker.removeSymbol(symbol);
-        }
+      if (currentOwner && force && currentOwner.workerId !== targetWorkerId) {
+        currentOwner.removeSymbol(symbol);
       }
 
       // 5. Assign to target worker
-      const targetWorker = this.workerPoolPort.getWorker(targetWorkerId);
+      const targetWorker = workers.get(targetWorkerId);
       if (targetWorker) {
         targetWorker.assignSymbol(symbol);
       }
@@ -100,14 +95,15 @@ export class AssignSymbolToWorkerUseCase {
   }
 
   /**
-   * Find worker that owns a symbol using WorkerPoolPort
+   * Find worker that owns a symbol
    */
-  private findWorkerBySymbol(symbol: string): string | null {
-    const workerIds = this.workerPoolPort.getWorkerIds();
-    for (const workerId of workerIds) {
-      const worker = this.workerPoolPort.getWorker(workerId);
-      if (worker?.hasSymbol(symbol)) {
-        return workerId;
+  private findWorkerBySymbol(
+    symbol: string,
+    workers: Map<string, WorkerThread>
+  ): WorkerThread | null {
+    for (const worker of workers.values()) {
+      if (worker.hasSymbol(symbol)) {
+        return worker;
       }
     }
     return null;
@@ -116,14 +112,17 @@ export class AssignSymbolToWorkerUseCase {
   /**
    * Select optimal worker for symbol using ConsistentHashRouter
    */
-  private selectWorkerForSymbol(symbol: string): string | null {
+  private selectWorkerForSymbol(
+    symbol: string,
+    workers: Map<string, WorkerThread>
+  ): string | null {
     try {
       const routingResult =
         this.consistentHashRouter.getWorkerForSymbol(symbol);
       return routingResult.workerId;
     } catch {
       // Fallback if ConsistentHashRouter has no workers
-      const workerIds = this.workerPoolPort.getWorkerIds();
+      const workerIds = Array.from(workers.keys());
       if (workerIds.length === 0) return null;
       return workerIds[0];
     }

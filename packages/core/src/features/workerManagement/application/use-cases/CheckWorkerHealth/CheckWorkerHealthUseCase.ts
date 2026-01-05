@@ -8,11 +8,10 @@
 import { injectable, inject } from 'inversify';
 import { WORKER_MANAGEMENT_TYPES } from '../../../../../shared/lib/di/bindings/features/workerManagement/types.js';
 import {
-  WorkerCommunicationPort,
+  WorkerManagementPort,
   WorkerMessage,
-} from '../../ports/in/WorkerCommunicationPort.js';
+} from '../../ports/in/WorkerManagementPort.js';
 import { WorkerThreadPort } from '../../ports/out/WorkerThreadPort.js';
-import { WorkerPoolPort } from '../../ports/in/WorkerPoolPort.js';
 import {
   CheckWorkerHealthRequest,
   CheckWorkerHealthResult,
@@ -25,12 +24,10 @@ const DEFAULT_TIMEOUT_MS = 5000;
 @injectable()
 export class CheckWorkerHealthUseCase {
   constructor(
-    @inject(WORKER_MANAGEMENT_TYPES.WorkerCommunicationPort)
-    private workerIPC: WorkerCommunicationPort,
+    @inject(WORKER_MANAGEMENT_TYPES.WorkerManagementPort)
+    private workerManagementPort: WorkerManagementPort,
     @inject(WORKER_MANAGEMENT_TYPES.WorkerThreadPort)
-    private workerThreadPort: WorkerThreadPort,
-    @inject(WORKER_MANAGEMENT_TYPES.WorkerPoolPort)
-    private workerPoolPort: WorkerPoolPort
+    private workerThreadPort: WorkerThreadPort
   ) {}
 
   /**
@@ -48,9 +45,11 @@ export class CheckWorkerHealthUseCase {
         data: { check_timestamp: Date.now() },
       };
 
-      const response = await this.workerIPC.sendToWorker(workerId, message, {
-        timeoutMs,
-      });
+      const response = await this.workerManagementPort.sendToWorker(
+        workerId,
+        message,
+        { timeoutMs }
+      );
 
       // Extract metrics from worker response
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -65,7 +64,7 @@ export class CheckWorkerHealthUseCase {
 
       // Update WorkerThread.healthMetrics with the received metrics
       if (metrics) {
-        const worker = this.workerPoolPort.getWorker(workerId);
+        const worker = this.workerManagementPort.getWorker(workerId);
         if (worker) {
           // Update memory usage (convert from MB object to bytes)
           if (metrics.memoryUsage?.rssMB) {

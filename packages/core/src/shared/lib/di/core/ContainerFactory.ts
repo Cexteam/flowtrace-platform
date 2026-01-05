@@ -64,7 +64,6 @@ export class ContainerFactory {
     // Configure main thread features
     MainThread.configureCandleProcessing(container);
     MainThread.configureSymbolManagement(container);
-    MainThread.configureTradeRouter(container);
     MainThread.configureWorkerManagement(container);
     MainThread.configureMarketData(container);
     MainThread.configureExchangeManagement(container);

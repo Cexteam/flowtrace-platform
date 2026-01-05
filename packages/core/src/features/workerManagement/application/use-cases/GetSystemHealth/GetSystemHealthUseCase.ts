@@ -7,7 +7,7 @@
  */
 
 import { injectable } from 'inversify';
-import { WorkerHealthStatus } from '../../ports/in/WorkerHealthMonitorPort.js';
+import { WorkerHealthStatus } from '../../ports/in/WorkerStatusPort.js';
 import {
   GetSystemHealthResult,
   GetAllWorkersHealthStatusResult,

@@ -29,12 +29,13 @@ const logger = createLogger('HybridEventPublisher');
  */
 @injectable()
 export class HybridEventPublisher implements EventPublisherPort {
-  private useUnixSocket: boolean = true;
+  private useUnixSocket: boolean = false; // Start with FALSE to avoid race condition
   private reconnectAttempts: number = 0;
   private readonly maxReconnectAttempts: number = 10;
   private readonly baseReconnectDelay: number = 1000; // 1 second
   private readonly maxReconnectDelay: number = 30000; // 30 seconds
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private initPromise: Promise<void> | null = null; // Track initialization
 
   constructor(
     @inject('IPCClient')
@@ -42,7 +43,7 @@ export class HybridEventPublisher implements EventPublisherPort {
     @inject('RuntimeDB')
     private runtimeDB: RuntimeDB
   ) {
-    this.initializeConnection();
+    this.initPromise = this.initializeConnection();
   }
 
   /**
@@ -74,6 +75,12 @@ export class HybridEventPublisher implements EventPublisherPort {
    *
    */
   async publishCandleComplete(candle: FootprintCandle): Promise<void> {
+    // Wait for initialization to complete on first publish
+    if (this.initPromise) {
+      await this.initPromise;
+      this.initPromise = null;
+    }
+
     const message = this.createMessage('candle:complete', candle.toJSON());
 
     // Try Unix Socket (fast path)
@@ -121,6 +128,12 @@ export class HybridEventPublisher implements EventPublisherPort {
    * Uses same hybrid strategy as candle events
    */
   async publishMetrics(metrics: ProcessingMetrics): Promise<void> {
+    // Wait for initialization to complete on first publish
+    if (this.initPromise) {
+      await this.initPromise;
+      this.initPromise = null;
+    }
+
     const message = this.createMessage('metrics', metrics);
 
     // Try Unix Socket first

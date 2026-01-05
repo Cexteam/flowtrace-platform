@@ -2,41 +2,41 @@
  * WorkerManagement Feature Core Bindings
  *
  * Configures runtime-agnostic bindings for the WorkerManagement feature.
- * This includes application services, use cases, and infrastructure that
- * doesn't depend on platform-specific adapters.
- *
- * Platform-specific adapters are configured separately in the adapters/ directory.
  *
  * Services bound in this module:
- * - WorkerPoolService: Worker pool management service (inbound port)
- * - WorkerIPCService: Worker IPC communication service (inbound port)
- * - WorkerHealthMonitorService: Worker health monitoring service (inbound port)
+ * - WorkerManagementService: Unified service for worker lifecycle, communication, and routing
+ * - WorkerStatusService: Service for worker status and health monitoring
  * - SpawnWorkerUseCase: Spawn new worker thread
  * - CheckWorkerHealthUseCase: Check worker health
  * - GetSystemHealthUseCase: Get system health status
+ * - RouteTradesUseCase: Route trades to workers
+ * - AssignSymbolToWorkerUseCase: Assign symbol to worker
+ * - RemoveSymbolFromWorkerUseCase: Remove symbol from worker
  * - ConsistentHashRouter: Domain service for consistent hashing
  * - NodeWorkerThreadAdapter: Worker thread adapter
- *
  */
 
 import { Container } from 'inversify';
 import { WORKER_MANAGEMENT_TYPES } from './types.js';
 
 // Application Layer - Ports
-import { WorkerPoolPort } from '../../../../../../features/workerManagement/application/ports/in/WorkerPoolPort.js';
-import { WorkerCommunicationPort } from '../../../../../../features/workerManagement/application/ports/in/WorkerCommunicationPort.js';
-import { WorkerHealthMonitorPort } from '../../../../../../features/workerManagement/application/ports/in/WorkerHealthMonitorPort.js';
+import { WorkerManagementPort } from '../../../../../../features/workerManagement/application/ports/in/WorkerManagementPort.js';
+import { WorkerStatusPort } from '../../../../../../features/workerManagement/application/ports/in/WorkerStatusPort.js';
 import { WorkerThreadPort } from '../../../../../../features/workerManagement/application/ports/out/WorkerThreadPort.js';
 
-// Application Layer - Use Cases
+// Application Layer - Use Cases (existing)
 import { SpawnWorkerUseCase } from '../../../../../../features/workerManagement/application/use-cases/SpawnWorker/index.js';
 import { CheckWorkerHealthUseCase } from '../../../../../../features/workerManagement/application/use-cases/CheckWorkerHealth/index.js';
 import { GetSystemHealthUseCase } from '../../../../../../features/workerManagement/application/use-cases/GetSystemHealth/index.js';
 
+// Application Layer - Use Cases (moved from tradeRouter)
+import { RouteTradesUseCase } from '../../../../../../features/workerManagement/application/use-cases/RouteTrades/index.js';
+import { AssignSymbolToWorkerUseCase } from '../../../../../../features/workerManagement/application/use-cases/AssignSymbolToWorker/index.js';
+import { RemoveSymbolFromWorkerUseCase } from '../../../../../../features/workerManagement/application/use-cases/RemoveSymbolFromWorker/index.js';
+
 // Application Layer - Services
-import { WorkerPoolService } from '../../../../../../features/workerManagement/application/services/WorkerPoolService.js';
-import { WorkerIPCService } from '../../../../../../features/workerManagement/application/services/WorkerIPCService.js';
-import { WorkerHealthMonitorService } from '../../../../../../features/workerManagement/application/services/WorkerHealthMonitorService.js';
+import { WorkerManagementService } from '../../../../../../features/workerManagement/application/services/WorkerManagementService.js';
+import { WorkerStatusService } from '../../../../../../features/workerManagement/application/services/WorkerStatusService.js';
 
 // Domain Layer - Services
 import { ConsistentHashRouter } from '../../../../../../features/workerManagement/domain/services/ConsistentHashRouter.js';
@@ -54,6 +54,17 @@ import { NodeWorkerThreadAdapter } from '../../../../../../features/workerManage
  */
 export function configureWorkerManagementCore(container: Container): void {
   // ========================================
+  // INFRASTRUCTURE LAYER - ADAPTERS
+  // ========================================
+
+  // NodeWorkerThreadAdapter implements WorkerThreadPort
+  // Must be bound first as other services depend on it
+  container
+    .bind<WorkerThreadPort>(WORKER_MANAGEMENT_TYPES.WorkerThreadPort)
+    .to(NodeWorkerThreadAdapter)
+    .inSingletonScope();
+
+  // ========================================
   // DOMAIN LAYER - SERVICES
   // ========================================
 
@@ -63,7 +74,7 @@ export function configureWorkerManagementCore(container: Container): void {
     .inSingletonScope();
 
   // ========================================
-  // APPLICATION LAYER - USE CASES
+  // APPLICATION LAYER - USE CASES (existing)
   // ========================================
 
   container
@@ -82,50 +93,45 @@ export function configureWorkerManagementCore(container: Container): void {
     .inSingletonScope();
 
   // ========================================
+  // APPLICATION LAYER - USE CASES (moved from tradeRouter)
+  // ========================================
+
+  container
+    .bind(WORKER_MANAGEMENT_TYPES.RouteTradesUseCase)
+    .to(RouteTradesUseCase)
+    .inSingletonScope();
+
+  container
+    .bind(WORKER_MANAGEMENT_TYPES.AssignSymbolToWorkerUseCase)
+    .to(AssignSymbolToWorkerUseCase)
+    .inSingletonScope();
+
+  container
+    .bind(WORKER_MANAGEMENT_TYPES.RemoveSymbolFromWorkerUseCase)
+    .to(RemoveSymbolFromWorkerUseCase)
+    .inSingletonScope();
+
+  // ========================================
   // APPLICATION LAYER - SERVICES (INBOUND PORTS)
   // ========================================
 
-  // WorkerPoolService implements WorkerPoolPort
+  // WorkerManagementService implements WorkerManagementPort
   container
-    .bind(WORKER_MANAGEMENT_TYPES.WorkerPoolService)
-    .to(WorkerPoolService)
+    .bind(WORKER_MANAGEMENT_TYPES.WorkerManagementService)
+    .to(WorkerManagementService)
     .inSingletonScope();
 
   container
-    .bind<WorkerPoolPort>(WORKER_MANAGEMENT_TYPES.WorkerPoolPort)
-    .toService(WORKER_MANAGEMENT_TYPES.WorkerPoolService);
+    .bind<WorkerManagementPort>(WORKER_MANAGEMENT_TYPES.WorkerManagementPort)
+    .toService(WORKER_MANAGEMENT_TYPES.WorkerManagementService);
 
-  // WorkerIPCService implements WorkerCommunicationPort
+  // WorkerStatusService implements WorkerStatusPort
   container
-    .bind(WORKER_MANAGEMENT_TYPES.WorkerIPCService)
-    .to(WorkerIPCService)
+    .bind(WORKER_MANAGEMENT_TYPES.WorkerStatusService)
+    .to(WorkerStatusService)
     .inSingletonScope();
 
   container
-    .bind<WorkerCommunicationPort>(
-      WORKER_MANAGEMENT_TYPES.WorkerCommunicationPort
-    )
-    .toService(WORKER_MANAGEMENT_TYPES.WorkerIPCService);
-
-  // WorkerHealthMonitorService implements WorkerHealthMonitorPort
-  container
-    .bind(WORKER_MANAGEMENT_TYPES.WorkerHealthMonitorService)
-    .to(WorkerHealthMonitorService)
-    .inSingletonScope();
-
-  container
-    .bind<WorkerHealthMonitorPort>(
-      WORKER_MANAGEMENT_TYPES.WorkerHealthMonitorPort
-    )
-    .toService(WORKER_MANAGEMENT_TYPES.WorkerHealthMonitorService);
-
-  // ========================================
-  // INFRASTRUCTURE LAYER - ADAPTERS
-  // ========================================
-
-  // NodeWorkerThreadAdapter implements WorkerThreadPort
-  container
-    .bind<WorkerThreadPort>(WORKER_MANAGEMENT_TYPES.WorkerThreadPort)
-    .to(NodeWorkerThreadAdapter)
-    .inSingletonScope();
+    .bind<WorkerStatusPort>(WORKER_MANAGEMENT_TYPES.WorkerStatusPort)
+    .toService(WORKER_MANAGEMENT_TYPES.WorkerStatusService);
 }

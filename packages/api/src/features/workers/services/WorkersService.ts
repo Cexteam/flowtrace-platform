@@ -8,7 +8,7 @@
 
 import { Injectable, Inject } from '@nestjs/common';
 import { BRIDGE_TOKENS } from '../../../bridge/index.js';
-import type { WorkerPoolPort, WorkerHealthMonitorPort } from '@flowtrace/core';
+import type { WorkerManagementPort, WorkerStatusPort } from '@flowtrace/core';
 import type {
   WorkerResponseDto,
   WorkerListResponseDto,
@@ -54,38 +54,38 @@ function toWorkerResponseDto(
 @Injectable()
 export class WorkersService {
   constructor(
-    @Inject(BRIDGE_TOKENS.WORKER_POOL_PORT)
-    private readonly workerPoolPort: WorkerPoolPort | null,
-    @Inject(BRIDGE_TOKENS.WORKER_HEALTH_MONITOR_PORT)
-    private readonly workerHealthMonitorPort: WorkerHealthMonitorPort | null
+    @Inject(BRIDGE_TOKENS.WORKER_MANAGEMENT_PORT)
+    private readonly workerManagementPort: WorkerManagementPort | null,
+    @Inject(BRIDGE_TOKENS.WORKER_STATUS_PORT)
+    private readonly workerStatusPort: WorkerStatusPort | null
   ) {}
 
   /**
-   * Ensure the worker pool port is available
+   * Ensure the worker status port is available
    */
-  private getWorkerPoolPort(): WorkerPoolPort {
-    if (!this.workerPoolPort) {
-      throw new Error('Worker pool service not available');
+  private getWorkerStatusPort(): WorkerStatusPort {
+    if (!this.workerStatusPort) {
+      throw new Error('Worker status service not available');
     }
-    return this.workerPoolPort;
+    return this.workerStatusPort;
   }
 
   /**
-   * Ensure the health monitor port is available
+   * Ensure the worker management port is available
    */
-  private getHealthMonitorPort(): WorkerHealthMonitorPort {
-    if (!this.workerHealthMonitorPort) {
-      throw new Error('Worker health monitor service not available');
+  private getWorkerManagementPort(): WorkerManagementPort {
+    if (!this.workerManagementPort) {
+      throw new Error('Worker management service not available');
     }
-    return this.workerHealthMonitorPort;
+    return this.workerManagementPort;
   }
 
   /**
    * Get all workers with their status
    */
   async getWorkers(): Promise<WorkerListResponseDto> {
-    const port = this.getWorkerPoolPort();
-    const status = port.getStatus();
+    const port = this.getWorkerStatusPort();
+    const status = port.getPoolStatus();
 
     // Transform workers to response DTOs
     const workerDtos = status.workers.map((worker) =>
@@ -106,7 +106,7 @@ export class WorkersService {
    * Get a worker by ID
    */
   async getWorkerById(workerId: string): Promise<WorkerResponseDto | null> {
-    const port = this.getWorkerPoolPort();
+    const port = this.getWorkerManagementPort();
     const worker = port.getWorker(workerId);
 
     if (!worker) {
@@ -122,17 +122,17 @@ export class WorkersService {
   async getWorkerHealth(
     workerId: string
   ): Promise<WorkerHealthResponseDto | null> {
-    const poolPort = this.getWorkerPoolPort();
-    const healthPort = this.getHealthMonitorPort();
+    const managementPort = this.getWorkerManagementPort();
+    const statusPort = this.getWorkerStatusPort();
 
     // First check if worker exists
-    const worker = poolPort.getWorker(workerId);
+    const worker = managementPort.getWorker(workerId);
     if (!worker) {
       return null;
     }
 
-    // Get health status from health monitor
-    const healthStatusMap = healthPort.getHealthStatus();
+    // Get health status from status port
+    const healthStatusMap = statusPort.getHealthStatus();
     const healthStatus = healthStatusMap.get(workerId);
 
     const workerJson = worker.toJSON();
@@ -166,8 +166,8 @@ export class WorkersService {
    *
    */
   async getWorkerStats(): Promise<WorkerStatsDto> {
-    const port = this.getWorkerPoolPort();
-    const status = port.getStatus();
+    const port = this.getWorkerStatusPort();
+    const status = port.getPoolStatus();
 
     const totalSymbols = status.workers.reduce((sum, worker) => {
       const assignedSymbols = worker.toJSON().assignedSymbols as

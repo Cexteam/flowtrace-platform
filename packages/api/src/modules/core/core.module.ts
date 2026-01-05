@@ -14,7 +14,7 @@ import type { Container } from 'inversify';
 import {
   CANDLE_PROCESSING_TYPES,
   SYMBOL_MANAGEMENT_TYPES,
-  TRADE_ROUTER_TYPES,
+  WORKER_MANAGEMENT_TYPES,
   CACHE_TOKEN,
   type ICache,
 } from '@flowtrace/core';
@@ -33,8 +33,8 @@ export const CORE_TOKENS = {
   SYMBOL_MANAGEMENT_SERVICE: 'SYMBOL_MANAGEMENT_SERVICE',
   SYMBOL_REPOSITORY: 'SYMBOL_REPOSITORY',
 
-  // Trade Router
-  TRADE_ROUTER_PORT: 'TRADE_ROUTER_PORT',
+  // Worker Management (replaces Trade Router)
+  WORKER_MANAGEMENT_PORT: 'WORKER_MANAGEMENT_PORT',
 
   // Infrastructure
   CACHE: 'CACHE',
@@ -149,14 +149,14 @@ export class CoreModule {
         },
       },
 
-      // Trade Router services
+      // Worker Management services (replaces Trade Router)
       {
-        provide: CORE_TOKENS.TRADE_ROUTER_PORT,
+        provide: CORE_TOKENS.WORKER_MANAGEMENT_PORT,
         useFactory: () => {
           try {
-            return container.get(TRADE_ROUTER_TYPES.TradeRouterDrivingPort);
+            return container.get(WORKER_MANAGEMENT_TYPES.WorkerManagementPort);
           } catch {
-            console.warn('TradeRouterDrivingPort not bound in container');
+            console.warn('WorkerManagementPort not bound in container');
             return null;
           }
         },

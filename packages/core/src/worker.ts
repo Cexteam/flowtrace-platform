@@ -29,8 +29,16 @@ import {
 import type {
   WorkerMessage,
   WorkerResponse,
-  WorkerReadyMessage,
-} from './features/workerManagement/application/ports/in/WorkerCommunicationPort.js';
+} from './features/workerManagement/application/ports/in/WorkerManagementPort.js';
+
+/**
+ * Worker ready message sent to main thread
+ */
+interface WorkerReadyMessage {
+  type: 'WORKER_READY';
+  workerId: string;
+  timestamp: number;
+}
 
 const workerId = workerData?.workerId || 'unknown';
 const logger = createLogger(`Worker-${workerId}`);
