@@ -3,9 +3,9 @@
  *
  * Displays detailed information about a single worker.
  * Shows: Worker ID, Status, Uptime, CPU Usage, Memory Usage,
- * Assigned Symbols, Processing Stats, Health Indicators
+ * Assigned Symbols, Health Indicators
  *
- * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5
+ * Requirements: 7.1, 7.2, 7.3, 7.5, 4.2, 4.3, 4.5
  */
 
 'use client';
@@ -22,6 +22,16 @@ import { Button } from '../../../../components/ui/button';
 import { Badge } from '../../../../components/ui/badge';
 import { WorkerHealthBadge } from './WorkerHealthBadge';
 import type { WorkerHealthMetrics, WorkerState } from '../../domain/types';
+import {
+  MEMORY_THRESHOLDS,
+  getQueueLengthVariant,
+  getQueueLengthStatus,
+  getLatencyVariant,
+  getLatencyStatus,
+  getThroughputVariant,
+  getCpuVariant,
+  getMemoryVariant,
+} from '../../domain/constants';
 
 /**
  * Format bytes to human readable string
@@ -124,7 +134,7 @@ function StatCard({
 
 /**
  * Health metrics display component
- * Requirements: 7.2, 7.4
+ * Requirements: 7.2, 7.4, 4.2, 4.3, 4.5
  */
 interface HealthMetricsProps {
   metrics: WorkerHealthMetrics;
@@ -132,78 +142,73 @@ interface HealthMetricsProps {
 }
 
 function HealthMetricsDisplay({ metrics, cpuUsage }: HealthMetricsProps) {
-  const totalTrades = metrics?.totalTradesProcessed ?? 0;
-  const eventsPublished = metrics?.eventsPublished ?? 0;
-  const avgProcessingTime = metrics?.averageProcessingTimeMs ?? 0;
   const memoryUsage = metrics?.memoryUsageBytes ?? 0;
-  const errorCount = metrics?.errorCount ?? 0;
 
-  // Calculate memory percentage (assuming 1GB limit)
-  const memoryPercent = (memoryUsage / (1024 * 1024 * 1024)) * 100;
+  // Per-worker metrics (Requirements 4.2, 4.3, 4.5)
+  const queueLength = metrics?.queueLength ?? 0;
+  const processingLatencyMs = metrics?.processingLatencyMs ?? 0;
+  const throughputTradesPerSecond = metrics?.throughputTradesPerSecond ?? 0;
 
-  // Determine variants based on thresholds
-  const cpuVariant =
-    cpuUsage && cpuUsage > 80
-      ? 'warning'
-      : cpuUsage && cpuUsage > 95
-      ? 'error'
-      : 'default';
-  const memoryVariant =
-    memoryPercent > 80 ? 'warning' : memoryPercent > 95 ? 'error' : 'default';
-  const errorVariant =
-    errorCount > 10 ? 'error' : errorCount > 0 ? 'warning' : 'default';
+  // Calculate memory percentage using constant
+  const memoryPercent = (memoryUsage / MEMORY_THRESHOLDS.LIMIT_BYTES) * 100;
+
+  // Determine variants using imported functions from constants
+  const cpuVariant = getCpuVariant(cpuUsage);
+  const memoryVariant = getMemoryVariant(memoryPercent);
+
+  // Per-worker metric variants
+  const queueVariant = getQueueLengthVariant(queueLength);
+  const latencyVariant = getLatencyVariant(processingLatencyMs);
+  const throughputVariant = getThroughputVariant(throughputTradesPerSecond);
 
   return (
     <div className="space-y-4">
+      {/* Performance Metrics - Requirements 4.2, 4.3, 4.5 */}
+      <div>
+        <h4 className="text-sm font-medium text-muted-foreground mb-3">
+          Performance Metrics
+          <span className="ml-2 text-xs font-normal">(per-worker)</span>
+        </h4>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <StatCard
+            label="Queue Length"
+            value={queueLength}
+            subValue={getQueueLengthStatus(queueLength)}
+            variant={queueVariant}
+          />
+          <StatCard
+            label="Processing Latency"
+            value={`${processingLatencyMs.toFixed(2)} ms`}
+            subValue={getLatencyStatus(processingLatencyMs)}
+            variant={latencyVariant}
+          />
+          <StatCard
+            label="Throughput"
+            value={`${throughputTradesPerSecond.toFixed(1)}/s`}
+            subValue="trades per second"
+            variant={throughputVariant}
+          />
+        </div>
+      </div>
+
       {/* Resource Usage - Requirements 7.2 */}
       <div>
         <h4 className="text-sm font-medium text-muted-foreground mb-3">
           Resource Usage
+          <span className="ml-2 text-xs font-normal">(per-worker)</span>
         </h4>
         <div className="grid grid-cols-2 gap-4">
           <StatCard
             label="CPU Usage"
             value={cpuUsage !== undefined ? `${cpuUsage.toFixed(1)}%` : '-'}
+            subValue="processing time ratio"
             variant={cpuVariant}
           />
           <StatCard
-            label="Memory Usage"
+            label="V8 Heap Memory"
             value={formatBytes(memoryUsage)}
             subValue={`${memoryPercent.toFixed(1)}%`}
             variant={memoryVariant}
-          />
-        </div>
-      </div>
-
-      {/* Processing Stats - Requirements 7.4 */}
-      <div>
-        <h4 className="text-sm font-medium text-muted-foreground mb-3">
-          Processing Stats
-        </h4>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <StatCard
-            label="Trades Processed"
-            value={totalTrades.toLocaleString()}
-          />
-          <StatCard
-            label="Events Published"
-            value={eventsPublished.toLocaleString()}
-          />
-          <StatCard
-            label="Avg Processing Time"
-            value={`${avgProcessingTime.toFixed(2)} ms`}
-          />
-          <StatCard
-            label="Error Count"
-            value={errorCount}
-            variant={errorVariant}
-          />
-          <StatCard
-            label="Throughput"
-            value={
-              totalTrades > 0 ? `${(totalTrades / 60).toFixed(1)}/s` : '0/s'
-            }
-            subValue="messages per second"
           />
         </div>
       </div>

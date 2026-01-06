@@ -44,6 +44,11 @@ function toWorkerResponseDto(
       cpuUsagePercent: (healthMetrics?.cpuUsagePercent as number) ?? 0,
       errorCount: (healthMetrics?.errorCount as number) ?? 0,
       lastError: healthMetrics?.lastError as string | undefined,
+      // NEW PER-WORKER METRICS (Requirements 1.1, 2.2, 3.2)
+      queueLength: (healthMetrics?.queueLength as number) ?? 0,
+      processingLatencyMs: (healthMetrics?.processingLatencyMs as number) ?? 0,
+      throughputTradesPerSecond:
+        (healthMetrics?.throughputTradesPerSecond as number) ?? 0,
     },
     assignedSymbols: (worker.assignedSymbols as string[]) ?? [],
     lastActivityAt: worker.lastActivityAt as string,
@@ -153,6 +158,12 @@ export class WorkersService {
         cpuUsagePercent: (healthMetrics?.cpuUsagePercent as number) ?? 0,
         errorCount: (healthMetrics?.errorCount as number) ?? 0,
         lastError: healthMetrics?.lastError as string | undefined,
+        // NEW PER-WORKER METRICS (Requirements 1.1, 2.2, 3.2)
+        queueLength: (healthMetrics?.queueLength as number) ?? 0,
+        processingLatencyMs:
+          (healthMetrics?.processingLatencyMs as number) ?? 0,
+        throughputTradesPerSecond:
+          (healthMetrics?.throughputTradesPerSecond as number) ?? 0,
       },
       lastHeartbeat:
         healthStatus?.lastHeartbeat?.toISOString() ??

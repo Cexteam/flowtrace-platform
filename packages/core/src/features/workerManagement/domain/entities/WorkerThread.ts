@@ -37,6 +37,14 @@ export interface WorkerHealthMetrics {
   errorCount: number;
   /** Last error if any */
   lastError?: string;
+
+  // NEW PER-WORKER METRICS (Requirements 1.1, 2.2, 3.2)
+  /** Number of pending messages in worker's message queue */
+  queueLength: number;
+  /** Rolling average processing latency in milliseconds (last 100 batches) */
+  processingLatencyMs: number;
+  /** Trades processed per second (60-second rolling window) */
+  throughputTradesPerSecond: number;
 }
 
 /**
@@ -82,6 +90,10 @@ export class WorkerThread {
       memoryUsageBytes: 0,
       cpuUsagePercent: 0,
       errorCount: 0,
+      // NEW PER-WORKER METRICS
+      queueLength: 0,
+      processingLatencyMs: 0,
+      throughputTradesPerSecond: 0,
     };
   }
 
@@ -303,6 +315,33 @@ export class WorkerThread {
 
     // Store current snapshot for next calculation
     this._lastCpuSnapshot = currentSnapshot;
+  }
+
+  /**
+   * Update CPU usage directly from pre-calculated percentage
+   * Used when worker.ts already calculates delta-based CPU percentage
+   * @param percent - CPU usage percentage (0-100)
+   */
+  updateCpuUsagePercent(percent: number): void {
+    this._healthMetrics.cpuUsagePercent =
+      Math.round(Math.min(100, Math.max(0, percent)) * 10) / 10;
+  }
+
+  /**
+   * Update per-worker metrics from SYNC_METRICS response
+   * These are the true per-worker metrics (Requirements 1.1, 2.2, 3.2)
+   * @param metrics - Per-worker metrics from worker thread
+   */
+  updatePerWorkerMetrics(metrics: {
+    queueLength: number;
+    processingLatencyMs: number;
+    throughputTradesPerSecond: number;
+  }): void {
+    this._healthMetrics.queueLength = metrics.queueLength;
+    this._healthMetrics.processingLatencyMs = metrics.processingLatencyMs;
+    this._healthMetrics.throughputTradesPerSecond =
+      metrics.throughputTradesPerSecond;
+    this._lastActivityAt = new Date();
   }
 
   /**

@@ -3,8 +3,10 @@
  *
  * Custom hook for fetching and managing single worker detail state.
  * Follows the Controller → Hook → Component pattern.
+ * Auto-refreshes every 5 seconds to include new metrics (queueLength, processingLatencyMs, throughputTradesPerSecond).
  *
  * Requirements: 7.6 - Auto-refresh worker data every 5 seconds while detail panel is open
+ * Requirements: 4.4 - Auto-refresh worker metrics every 5 seconds
  * Requirements: 17.3 - Auto-refresh worker statistics periodically
  */
 

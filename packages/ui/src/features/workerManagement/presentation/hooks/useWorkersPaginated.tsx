@@ -3,8 +3,10 @@
  *
  * Custom hook for fetching and managing paginated worker list state.
  * Supports search, filter, pagination, and sorting.
+ * Auto-refreshes every 5 seconds to include new metrics (queueLength, processingLatencyMs, throughputTradesPerSecond).
  *
  * Requirements: 6.1, 6.2, 6.3, 6.4
+ * Requirements: 4.4 - Auto-refresh worker metrics every 5 seconds
  * Requirements: 17.3 - Auto-refresh worker statistics periodically
  */
 
@@ -141,6 +143,24 @@ export function useWorkersPaginated(
         if (sort.column === 'memory') {
           aVal = a.healthMetrics?.memoryUsageBytes ?? 0;
           bVal = b.healthMetrics?.memoryUsageBytes ?? 0;
+        }
+
+        // Handle queueLength sorting (Requirements 4.1)
+        if (sort.column === 'queueLength') {
+          aVal = a.healthMetrics?.queueLength ?? 0;
+          bVal = b.healthMetrics?.queueLength ?? 0;
+        }
+
+        // Handle processingLatencyMs sorting
+        if (sort.column === 'processingLatencyMs') {
+          aVal = a.healthMetrics?.processingLatencyMs ?? 0;
+          bVal = b.healthMetrics?.processingLatencyMs ?? 0;
+        }
+
+        // Handle throughputTradesPerSecond sorting
+        if (sort.column === 'throughputTradesPerSecond') {
+          aVal = a.healthMetrics?.throughputTradesPerSecond ?? 0;
+          bVal = b.healthMetrics?.throughputTradesPerSecond ?? 0;
         }
 
         if (typeof aVal === 'string' && typeof bVal === 'string') {

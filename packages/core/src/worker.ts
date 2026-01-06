@@ -15,6 +15,7 @@
  */
 import 'reflect-metadata';
 import { parentPort, workerData } from 'worker_threads';
+import * as v8 from 'v8';
 import {
   ContainerFactory,
   CANDLE_PROCESSING_TYPES,
@@ -67,6 +68,14 @@ let isStateLoaded = false;
 // Message queue for sequential processing
 const messageQueue: WorkerMessage[] = [];
 let isProcessing = false;
+
+// NEW: Metrics tracking variables for health monitoring
+let processingLatencies: number[] = []; // Rolling window of last 100 processing times
+let tradesProcessed: Array<{ timestamp: number; count: number }> = []; // Rolling window for throughput
+
+// NEW: Track total processing time for estimated CPU calculation
+let totalProcessingTimeMs: number = 0; // Total time spent processing in current window
+let lastCpuWindowStart: number = Date.now(); // Start of current CPU measurement window
 
 async function processNextMessage(): Promise<void> {
   if (isProcessing || messageQueue.length === 0) return;
@@ -132,6 +141,31 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
             });
           }
         }
+
+        // NEW: Track processing metrics for health monitoring
+        const processingTime = Date.now() - msgStart;
+
+        // Add to rolling window (keep last 100)
+        processingLatencies.push(processingTime);
+        if (processingLatencies.length > 100) {
+          processingLatencies.shift();
+        }
+
+        // Track trades for throughput calculation
+        tradesProcessed.push({
+          timestamp: Date.now(),
+          count: trades.length,
+        });
+
+        // Clean old throughput entries (older than 60 seconds)
+        const cutoff = Date.now() - 60000;
+        tradesProcessed = tradesProcessed.filter(
+          (entry) => entry.timestamp > cutoff
+        );
+
+        // Track total processing time for estimated CPU
+        totalProcessingTimeMs += processingTime;
+
         result = {
           success: true,
           symbol,
@@ -162,31 +196,103 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
         break;
       }
       case 'WORKER_STATUS': {
+        const v8Heap = v8.getHeapStatistics();
         result = {
           workerId,
           uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
-          memoryUsage: process.memoryUsage(),
+          memoryUsage: {
+            heapUsedMB:
+              Math.round((v8Heap.used_heap_size / 1024 / 1024) * 100) / 100,
+            heapTotalMB:
+              Math.round((v8Heap.total_heap_size / 1024 / 1024) * 100) / 100,
+          },
         };
         break;
       }
       case 'SYNC_METRICS': {
         // Return current worker metrics for health monitoring
-        const mem = process.memoryUsage();
-        const cpu = process.cpuUsage();
+        // Use v8.getHeapStatistics() for per-worker V8 heap memory (each worker has its own V8 isolate)
+        const v8Heap = v8.getHeapStatistics();
+        const now = Date.now();
+
+        // Calculate estimated CPU based on processing time ratio
+        // This gives per-worker CPU estimate based on actual work done
+        const windowDuration = now - lastCpuWindowStart;
+        let cpuPercent = 0;
+        if (windowDuration > 0) {
+          // CPU% = (time spent processing / total elapsed time) * 100
+          cpuPercent = Math.min(
+            100,
+            Math.max(0, (totalProcessingTimeMs / windowDuration) * 100)
+          );
+        }
+
+        // Reset window for next measurement
+        totalProcessingTimeMs = 0;
+        lastCpuWindowStart = now;
+
+        // Calculate rolling average latency (last 100 batches)
+        const avgLatency =
+          processingLatencies.length > 0
+            ? processingLatencies.reduce((sum, lat) => sum + lat, 0) /
+              processingLatencies.length
+            : 0;
+
+        // Calculate throughput (trades/second over last 60 seconds)
+        const recentTrades = tradesProcessed.filter(
+          (entry) => now - entry.timestamp <= 60000
+        );
+        const totalRecentTrades = recentTrades.reduce(
+          (sum, entry) => sum + entry.count,
+          0
+        );
+        const throughput = totalRecentTrades / 60; // trades per second
+
+        // Calculate worker status based on metrics
+        let status: 'healthy' | 'warning' | 'critical' | 'unknown' = 'healthy';
+
+        try {
+          const queueLength = messageQueue.length;
+
+          // Critical conditions
+          if (queueLength > 50 || avgLatency > 5000) {
+            status = 'critical';
+          }
+          // Warning conditions
+          else if (queueLength > 10 || avgLatency > 1000 || throughput < 1) {
+            status = 'warning';
+          }
+          // Otherwise healthy
+          else {
+            status = 'healthy';
+          }
+        } catch (error) {
+          status = 'unknown';
+        }
+
         result = {
           workerId,
           uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
+          // Per-worker V8 heap memory (each worker thread has its own V8 isolate)
           memoryUsage: {
-            heapUsedMB: Math.round((mem.heapUsed / 1024 / 1024) * 100) / 100,
-            heapTotalMB: Math.round((mem.heapTotal / 1024 / 1024) * 100) / 100,
-            rssMB: Math.round((mem.rss / 1024 / 1024) * 100) / 100,
-            externalMB: Math.round((mem.external / 1024 / 1024) * 100) / 100,
+            heapUsedMB:
+              Math.round((v8Heap.used_heap_size / 1024 / 1024) * 100) / 100,
+            heapTotalMB:
+              Math.round((v8Heap.total_heap_size / 1024 / 1024) * 100) / 100,
+            heapLimitMB:
+              Math.round((v8Heap.heap_size_limit / 1024 / 1024) * 100) / 100,
+            externalMB:
+              Math.round((v8Heap.external_memory / 1024 / 1024) * 100) / 100,
           },
           cpuUsage: {
-            userMs: Math.round(cpu.user / 1000), // microseconds to ms
-            systemMs: Math.round(cpu.system / 1000),
+            // Estimated CPU percentage based on processing time ratio (per-worker)
+            percent: Math.round(cpuPercent * 100) / 100,
           },
-          status: 'healthy',
+          // NEW PER-WORKER METRICS
+          queueLength: messageQueue.length,
+          processingLatencyMs: Math.round(avgLatency * 100) / 100,
+          throughputTradesPerSecond: Math.round(throughput * 100) / 100,
+          status,
           timestamp: new Date(),
         };
         break;

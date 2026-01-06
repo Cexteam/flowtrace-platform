@@ -5,6 +5,10 @@
  * Automatically detects environment and uses appropriate adapter.
  * Follows the Controller → Hook → Component pattern.
  *
+ * Note: This controller handles both IPC (Electron) and HTTP (Web) environments.
+ * Uses shared mapWorkerFromResponse for consistent data mapping.
+ *
+ * Requirements: 7.1, 7.2 - Consistent data mapping across environments
  */
 
 import type {
@@ -17,6 +21,7 @@ import type {
   GetWorkersRequest,
   GetWorkersResponse,
 } from '../../application/ports/out/WorkerApiPort';
+import { mapWorkerFromResponse } from '../../domain/mappers';
 
 /**
  * Server Action result type
@@ -74,7 +79,7 @@ export async function getWorkersAction(
         healthyWorkers?: number;
       }>('workers:getAll', request);
 
-      const mappedWorkers = data.workers.map(mapWorkerFromApi);
+      const mappedWorkers = data.workers.map(mapWorkerFromResponse);
 
       return {
         success: true,
@@ -110,7 +115,7 @@ export async function getWorkersAction(
       return {
         success: true,
         data: {
-          workers: data.workers.map(mapWorkerFromApi),
+          workers: data.workers.map(mapWorkerFromResponse),
           total: data.total,
         },
       };
@@ -150,7 +155,7 @@ export async function getWorkerByIdAction(
 
       return {
         success: true,
-        data: mapWorkerFromApi(data),
+        data: mapWorkerFromResponse(data),
       };
     } else {
       // Web: Use HTTP
@@ -176,7 +181,7 @@ export async function getWorkerByIdAction(
       const data = await response.json();
       return {
         success: true,
-        data: mapWorkerFromApi(data),
+        data: mapWorkerFromResponse(data),
       };
     }
   } catch (err) {
@@ -312,72 +317,4 @@ export async function getWorkerHealthAction(
       error: err instanceof Error ? err.message : 'Unknown error',
     };
   }
-}
-
-/**
- * Map API state to UI state
- * API uses: initializing, ready, busy, unhealthy, terminated
- * UI uses: idle, running, stopping, stopped, error
- */
-function mapWorkerState(apiState: string): Worker['state'] {
-  switch (apiState) {
-    case 'ready':
-      return 'idle';
-    case 'busy':
-      return 'running';
-    case 'initializing':
-      return 'idle';
-    case 'unhealthy':
-      return 'error';
-    case 'terminated':
-      return 'stopped';
-    default:
-      return 'idle';
-  }
-}
-
-/**
- * Map API response to Worker domain type
- */
-function mapWorkerFromApi(data: Record<string, unknown>): Worker {
-  const healthMetrics = data.healthMetrics as Record<string, unknown> | null;
-
-  // Extract memory usage for convenience
-  const memoryUsageBytes = healthMetrics?.memoryUsageBytes as
-    | number
-    | undefined;
-  const memoryUsageMB = memoryUsageBytes
-    ? memoryUsageBytes / (1024 * 1024)
-    : undefined;
-
-  // Map health metrics
-  const mappedHealthMetrics: WorkerHealthMetrics | null = healthMetrics
-    ? {
-        totalTradesProcessed:
-          (healthMetrics.totalTradesProcessed as number) ?? 0,
-        eventsPublished: (healthMetrics.eventsPublished as number) ?? 0,
-        averageProcessingTimeMs:
-          (healthMetrics.averageProcessingTimeMs as number) ?? 0,
-        memoryUsageBytes: (healthMetrics.memoryUsageBytes as number) ?? 0,
-        cpuUsagePercent: (healthMetrics.cpuUsagePercent as number) ?? 0,
-        errorCount: (healthMetrics.errorCount as number) ?? 0,
-      }
-    : null;
-
-  return {
-    workerId: data.workerId as string,
-    state: mapWorkerState(data.state as string),
-    symbolCount: (data.symbolCount as number) ?? 0,
-    uptimeSeconds: (data.uptimeSeconds as number) ?? 0,
-    isReady: (data.isReady as boolean) ?? false,
-    assignedSymbols: (data.assignedSymbols as string[]) || [],
-    lastActivityAt: data.lastActivityAt
-      ? new Date(data.lastActivityAt as string)
-      : null,
-    healthMetrics: mappedHealthMetrics,
-    createdAt: data.createdAt ? new Date(data.createdAt as string) : new Date(),
-    // CPU usage from healthMetrics.cpuUsagePercent
-    cpuUsage: mappedHealthMetrics?.cpuUsagePercent,
-    memoryUsageMB,
-  };
 }

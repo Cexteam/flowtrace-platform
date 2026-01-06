@@ -2,7 +2,9 @@
  * HttpWorkerAdapter - HTTP implementation of WorkerApiPort
  *
  * Implements WorkerApiPort for Cloud deployment using REST API calls.
+ * Uses shared mapWorkerFromResponse for consistent data mapping.
  *
+ * Requirements: 7.1, 7.2 - Consistent data mapping
  */
 
 import { injectable, inject } from 'inversify';
@@ -18,6 +20,7 @@ import type {
   WorkerSpawnConfig,
   WorkerSpawnResult,
 } from '../../../domain/types';
+import { mapWorkerFromResponse } from '../../../domain/mappers';
 
 /**
  * HTTP adapter for worker API operations
@@ -53,7 +56,7 @@ export class HttpWorkerAdapter implements WorkerApiPort {
 
     const data = await response.json();
     return {
-      workers: data.workers.map(this.mapWorkerFromApi),
+      workers: data.workers.map(mapWorkerFromResponse),
       total: data.total,
     };
   }
@@ -73,7 +76,7 @@ export class HttpWorkerAdapter implements WorkerApiPort {
     }
 
     const data = await response.json();
-    return this.mapWorkerFromApi(data);
+    return mapWorkerFromResponse(data);
   }
 
   /**
@@ -121,24 +124,5 @@ export class HttpWorkerAdapter implements WorkerApiPort {
     }
 
     return response.json();
-  }
-
-  /**
-   * Map API response to Worker domain type
-   */
-  private mapWorkerFromApi(data: Record<string, unknown>): Worker {
-    return {
-      workerId: data.workerId as string,
-      state: data.state as Worker['state'],
-      symbolCount: data.symbolCount as number,
-      uptimeSeconds: data.uptimeSeconds as number,
-      isReady: data.isReady as boolean,
-      assignedSymbols: (data.assignedSymbols as string[]) || [],
-      lastActivityAt: data.lastActivityAt
-        ? new Date(data.lastActivityAt as string)
-        : null,
-      healthMetrics: data.healthMetrics as WorkerHealthMetrics | null,
-      createdAt: new Date(data.createdAt as string),
-    };
   }
 }

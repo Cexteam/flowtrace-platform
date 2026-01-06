@@ -75,6 +75,23 @@ export class WorkerHealthMetricsDto {
 
   @ApiPropertyOptional({ description: 'Last error message if any' })
   lastError?: string;
+
+  // NEW PER-WORKER METRICS (Requirements 1.1, 2.2, 3.2)
+  @ApiProperty({
+    description: 'Number of pending messages in worker message queue',
+  })
+  queueLength!: number;
+
+  @ApiProperty({
+    description:
+      'Rolling average processing latency in milliseconds (last 100 batches)',
+  })
+  processingLatencyMs!: number;
+
+  @ApiProperty({
+    description: 'Trades processed per second (60-second rolling window)',
+  })
+  throughputTradesPerSecond!: number;
 }
 
 /**

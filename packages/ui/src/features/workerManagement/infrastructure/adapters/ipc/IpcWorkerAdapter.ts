@@ -2,7 +2,9 @@
  * IpcWorkerAdapter - IPC implementation of WorkerApiPort
  *
  * Implements WorkerApiPort for Desktop deployment using Electron IPC calls.
+ * Uses shared mapWorkerFromResponse for consistent data mapping.
  *
+ * Requirements: 7.1, 7.2 - Consistent data mapping
  */
 
 import { injectable } from 'inversify';
@@ -17,6 +19,7 @@ import type {
   WorkerSpawnConfig,
   WorkerSpawnResult,
 } from '../../../domain/types';
+import { mapWorkerFromResponse } from '../../../domain/mappers';
 
 /**
  * Electron IPC API interface
@@ -56,7 +59,7 @@ export class IpcWorkerAdapter implements WorkerApiPort {
     }>('workers:getAll', request);
 
     return {
-      workers: data.workers.map(this.mapWorkerFromIpc),
+      workers: data.workers.map(mapWorkerFromResponse),
       total: data.total,
     };
   }
@@ -75,7 +78,7 @@ export class IpcWorkerAdapter implements WorkerApiPort {
       return null;
     }
 
-    return this.mapWorkerFromIpc(data);
+    return mapWorkerFromResponse(data);
   }
 
   /**
@@ -94,24 +97,5 @@ export class IpcWorkerAdapter implements WorkerApiPort {
     return api.invoke<WorkerHealthMetrics | null>('workers:getHealth', {
       workerId,
     });
-  }
-
-  /**
-   * Map IPC response to Worker domain type
-   */
-  private mapWorkerFromIpc(data: Record<string, unknown>): Worker {
-    return {
-      workerId: data.workerId as string,
-      state: data.state as Worker['state'],
-      symbolCount: data.symbolCount as number,
-      uptimeSeconds: data.uptimeSeconds as number,
-      isReady: data.isReady as boolean,
-      assignedSymbols: (data.assignedSymbols as string[]) || [],
-      lastActivityAt: data.lastActivityAt
-        ? new Date(data.lastActivityAt as string | number)
-        : null,
-      healthMetrics: data.healthMetrics as WorkerHealthMetrics | null,
-      createdAt: new Date(data.createdAt as string | number),
-    };
   }
 }

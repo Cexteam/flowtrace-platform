@@ -26,6 +26,14 @@ export interface WorkerHealthMetrics {
   memoryUsageBytes: number;
   cpuUsagePercent: number;
   errorCount: number;
+
+  // NEW PER-WORKER METRICS (Requirements 1.1, 2.2, 3.2)
+  /** Number of pending messages in worker's message queue */
+  queueLength: number;
+  /** Rolling average processing latency in milliseconds (last 100 batches) */
+  processingLatencyMs: number;
+  /** Trades processed per second (60-second rolling window) */
+  throughputTradesPerSecond: number;
 }
 
 /**
@@ -111,18 +119,43 @@ export interface PaginatedWorkersResponse {
 
 /**
  * Derive worker health status from metrics
+ * Uses queue length, processing latency, and throughput thresholds (Requirements 5.1-5.5)
  */
 export function deriveWorkerHealth(worker: Worker): WorkerHealth {
   if (worker.state === 'error') return 'error';
   if (!worker.healthMetrics) return 'healthy';
 
-  const { errorCount, memoryUsageBytes } = worker.healthMetrics;
+  const {
+    errorCount,
+    memoryUsageBytes,
+    queueLength,
+    processingLatencyMs,
+    throughputTradesPerSecond,
+  } = worker.healthMetrics;
   const memoryUsageMB = memoryUsageBytes / (1024 * 1024);
 
-  // Error if error count > 10 or memory > 1GB
-  if (errorCount > 10 || memoryUsageMB > 1024) return 'error';
-  // Warning if error count > 0 or memory > 512MB
-  if (errorCount > 0 || memoryUsageMB > 512) return 'warning';
+  // Critical/Error conditions (Requirements 5.3)
+  // - Queue length > 50 OR latency > 5000ms OR error count > 10 OR memory > 1GB
+  if (
+    (queueLength ?? 0) > 50 ||
+    (processingLatencyMs ?? 0) > 5000 ||
+    errorCount > 10 ||
+    memoryUsageMB > 1024
+  ) {
+    return 'error';
+  }
+
+  // Warning conditions (Requirements 5.2, 5.4)
+  // - Queue length > 10 OR latency > 1000ms OR throughput < 1 OR error count > 0 OR memory > 512MB
+  if (
+    (queueLength ?? 0) > 10 ||
+    (processingLatencyMs ?? 0) > 1000 ||
+    (throughputTradesPerSecond ?? Infinity) < 1 ||
+    errorCount > 0 ||
+    memoryUsageMB > 512
+  ) {
+    return 'warning';
+  }
 
   return 'healthy';
 }

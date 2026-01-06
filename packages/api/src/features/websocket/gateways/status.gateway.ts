@@ -35,7 +35,12 @@ interface WorkerStatusMessage {
     eventsPublished: number;
     averageProcessingTimeMs: number;
     memoryUsageBytes: number;
+    cpuUsagePercent: number;
     errorCount: number;
+    // NEW PER-WORKER METRICS (Requirements 1.1, 2.2, 3.2)
+    queueLength: number;
+    processingLatencyMs: number;
+    throughputTradesPerSecond: number;
   };
   timestamp: number;
 }
@@ -362,7 +367,14 @@ export class StatusGateway
             averageProcessingTimeMs:
               (healthMetrics.averageProcessingTimeMs as number) ?? 0,
             memoryUsageBytes: (healthMetrics.memoryUsageBytes as number) ?? 0,
+            cpuUsagePercent: (healthMetrics.cpuUsagePercent as number) ?? 0,
             errorCount: (healthMetrics.errorCount as number) ?? 0,
+            // NEW PER-WORKER METRICS (Requirements 1.1, 2.2, 3.2)
+            queueLength: (healthMetrics.queueLength as number) ?? 0,
+            processingLatencyMs:
+              (healthMetrics.processingLatencyMs as number) ?? 0,
+            throughputTradesPerSecond:
+              (healthMetrics.throughputTradesPerSecond as number) ?? 0,
           }
         : undefined,
       timestamp: Date.now(),

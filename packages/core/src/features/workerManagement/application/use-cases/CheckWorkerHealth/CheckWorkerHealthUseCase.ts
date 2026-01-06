@@ -67,23 +67,40 @@ export class CheckWorkerHealthUseCase {
         const worker = this.workerManagementPort.getWorker(workerId);
         if (worker) {
           // Update memory usage (convert from MB object to bytes)
-          if (metrics.memoryUsage?.rssMB) {
-            worker.updateMemoryUsage(
-              Math.round(metrics.memoryUsage.rssMB * 1024 * 1024)
-            );
-          } else if (metrics.memoryUsage?.heapUsedMB) {
+          // Use heapUsedMB as it represents V8 heap memory
+          if (metrics.memoryUsage?.heapUsedMB) {
             worker.updateMemoryUsage(
               Math.round(metrics.memoryUsage.heapUsedMB * 1024 * 1024)
             );
+          } else if (metrics.memoryUsage?.rssMB) {
+            worker.updateMemoryUsage(
+              Math.round(metrics.memoryUsage.rssMB * 1024 * 1024)
+            );
           }
-          // Update CPU usage (calculate percentage from delta)
-          if (
+          // Update CPU usage - use pre-calculated percent from worker if available
+          // Worker.ts already calculates delta-based CPU percentage
+          if (metrics.cpuUsage?.percent !== undefined) {
+            worker.updateCpuUsagePercent(metrics.cpuUsage.percent);
+          } else if (
             metrics.cpuUsage?.userMs !== undefined &&
             metrics.cpuUsage?.systemMs !== undefined
           ) {
+            // Fallback: calculate from raw values
             worker.updateCpuUsage({
               userMs: metrics.cpuUsage.userMs,
               systemMs: metrics.cpuUsage.systemMs,
+            });
+          }
+          // NEW: Update per-worker metrics (Requirements 1.1, 2.2, 3.2)
+          if (
+            result?.queueLength !== undefined &&
+            result?.processingLatencyMs !== undefined &&
+            result?.throughputTradesPerSecond !== undefined
+          ) {
+            worker.updatePerWorkerMetrics({
+              queueLength: result.queueLength,
+              processingLatencyMs: result.processingLatencyMs,
+              throughputTradesPerSecond: result.throughputTradesPerSecond,
             });
           }
           // Record heartbeat

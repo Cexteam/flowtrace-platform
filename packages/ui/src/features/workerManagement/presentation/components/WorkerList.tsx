@@ -2,9 +2,9 @@
  * WorkerList Component
  *
  * Displays a list of workers using DataTable with search, filter, and pagination.
- * Shows: ID, Status, Assigned Symbols, CPU, Memory, Actions
+ * Shows: ID, Status, Assigned Symbols, Queue, CPU, Memory, Actions
  *
- * Requirements: 6.1, 6.2, 6.3, 6.4
+ * Requirements: 6.1, 6.2, 6.3, 6.4, 4.1, 4.3, 4.5
  */
 
 'use client';
@@ -26,6 +26,11 @@ import { Badge } from '../../../../components/ui/badge';
 import { WorkerHealthBadge } from './WorkerHealthBadge';
 import { useWorkersPaginated } from '../hooks/useWorkersPaginated';
 import type { Worker, WorkerState } from '../../domain/types';
+import {
+  QUEUE_LENGTH_THRESHOLDS,
+  getQueueLengthVariant,
+  type HealthVariant,
+} from '../../domain/constants';
 
 /**
  * Status filter options
@@ -74,6 +79,26 @@ function formatMemory(bytes: number | undefined): string {
 function formatCpu(percent: number | undefined): string {
   if (percent === undefined) return '-';
   return `${percent.toFixed(1)}%`;
+}
+
+/**
+ * Map HealthVariant to Badge variant
+ */
+function mapHealthVariantToBadge(
+  variant: HealthVariant
+): 'default' | 'warning' | 'destructive' {
+  if (variant === 'error') return 'destructive';
+  if (variant === 'warning') return 'warning';
+  return 'default';
+}
+
+/**
+ * Get queue status text for badge display
+ */
+function getQueueStatusText(queueLength: number): string {
+  if (queueLength > QUEUE_LENGTH_THRESHOLDS.CRITICAL) return 'Overloaded';
+  if (queueLength > QUEUE_LENGTH_THRESHOLDS.WARNING) return 'High';
+  return '';
 }
 
 /**
@@ -142,6 +167,37 @@ export function WorkerList({
         cell: ({ row }) => (
           <span className="text-center">{row.original.symbolCount}</span>
         ),
+      },
+      {
+        id: 'queueLength',
+        header: 'Queue',
+        cell: ({ row }) => {
+          const queueLength = row.original.healthMetrics?.queueLength ?? 0;
+          const variant = getQueueLengthVariant(queueLength);
+          const badgeVariant = mapHealthVariantToBadge(variant);
+          const statusText = getQueueStatusText(queueLength);
+
+          return (
+            <div className="flex items-center gap-2">
+              <span
+                className={
+                  variant === 'error'
+                    ? 'text-destructive font-medium'
+                    : variant === 'warning'
+                    ? 'text-yellow-600 dark:text-yellow-500 font-medium'
+                    : 'text-muted-foreground'
+                }
+              >
+                {queueLength}
+              </span>
+              {statusText && (
+                <Badge variant={badgeVariant} className="text-xs">
+                  {statusText}
+                </Badge>
+              )}
+            </div>
+          );
+        },
       },
       {
         accessorKey: 'cpuUsage',
