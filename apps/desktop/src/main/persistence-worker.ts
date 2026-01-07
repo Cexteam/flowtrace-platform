@@ -42,6 +42,13 @@ async function main(): Promise<void> {
       runtimeDbPath: config.runtimeDbPath,
       storageBaseDir: config.storageBaseDir,
       useDatabase: config.useDatabase,
+      fileStorageLocation: config.fileStorageLocation,
+      cloudConfig: config.cloudConfig
+        ? {
+            bucket: config.cloudConfig.bucketName,
+            prefix: config.cloudConfig.prefix,
+          }
+        : undefined,
       healthCheckPort: config.healthCheckPort,
     });
 
@@ -52,6 +59,8 @@ async function main(): Promise<void> {
       storage: {
         baseDir: config.storageBaseDir,
         useDatabase: config.useDatabase,
+        fileStorageLocation: config.fileStorageLocation,
+        cloud: config.cloudConfig,
         organizeByExchange: true,
         maxCandlesPerBlock: 1000,
         walMode: true,

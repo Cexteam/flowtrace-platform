@@ -1,15 +1,26 @@
 /**
  * Hybrid Storage Adapter
- * Facade adapter that delegates to either SQLite or file storage based on configuration.
+ * Facade adapter that delegates to either SQLite or hierarchical file storage.
  * Provides unified interface for both storage modes with runtime switching capability.
+ *
+ * Storage modes:
+ * - Database (SQLite): Default mode, uses SQLiteFlatBufferStorage
+ * - File (Local): Uses HierarchicalFileStorage with LocalFileStorageAdapter
+ * - File (Cloud): Uses HierarchicalFileStorage with CloudFileStorageAdapter (GCS)
  */
 
-import { injectable, inject, Container } from 'inversify';
+import { injectable, inject, optional } from 'inversify';
 import type { FootprintCandle } from '@flowtrace/core';
 import type { CandleStoragePort } from '../../application/ports/out/CandleStoragePort.js';
-import { BinaryStorageAdapter } from './BinaryStorageAdapter.js';
+import type { FileStoragePort } from '../../application/ports/out/FileStoragePort.js';
+import { HierarchicalFileStorage } from './HierarchicalFileStorage.js';
+import { LocalFileStorageAdapter } from './LocalFileStorageAdapter.js';
 import { SQLiteFlatBufferStorage } from './SQLiteFlatBufferStorage.js';
 import type { SQLiteStorageConfig } from './SQLiteFlatBufferStorage.js';
+import type {
+  CloudStorageConfig,
+  HierarchicalStorageConfig,
+} from '../../../../infrastructure/storage/hierarchical/types.js';
 import { CANDLE_PERSISTENCE_TYPES } from '../../di/types.js';
 
 export interface HybridStorageConfig {
@@ -18,6 +29,12 @@ export interface HybridStorageConfig {
 
   /** Use database storage (true) or file storage (false) */
   useDatabase?: boolean;
+
+  /** File storage location when useDatabase is false */
+  fileStorageLocation?: 'local' | 'cloud';
+
+  /** Cloud storage configuration (required if fileStorageLocation is 'cloud') */
+  cloudStorageConfig?: CloudStorageConfig;
 
   /** Organize databases by exchange (only for database mode) */
   organizeByExchange?: boolean;
@@ -33,6 +50,9 @@ export interface HybridStorageConfig {
 
   /** Memory-mapped I/O size in bytes (only for database mode) */
   mmapSize?: number;
+
+  /** Enable automatic metadata updates (file mode only) */
+  autoUpdateMetadata?: boolean;
 }
 
 /**
@@ -44,13 +64,15 @@ export interface HybridStorageConfig {
 @injectable()
 export class HybridStorageAdapter implements CandleStoragePort {
   private sqliteStorage?: SQLiteFlatBufferStorage;
-  private fileStorage?: BinaryStorageAdapter;
   private useDatabase: boolean;
   private config: HybridStorageConfig;
 
   constructor(
     @inject(CANDLE_PERSISTENCE_TYPES.HybridStorageConfig)
-    config: HybridStorageConfig
+    config: HybridStorageConfig,
+    @inject(CANDLE_PERSISTENCE_TYPES.HierarchicalFileStorage)
+    @optional()
+    private hierarchicalStorage?: HierarchicalFileStorage
   ) {
     this.config = config;
     this.useDatabase = config.useDatabase ?? true;
@@ -67,46 +89,12 @@ export class HybridStorageAdapter implements CandleStoragePort {
       };
       this.sqliteStorage = new SQLiteFlatBufferStorage(sqliteConfig);
     } else {
-      // Initialize file storage
-      const fileConfig = {
-        baseDir: config.baseDir,
-        maxCandlesPerBlock: config.maxCandlesPerBlock,
-      };
-      this.fileStorage = this.createBinaryStorageAdapter(fileConfig);
-    }
-  }
-
-  /**
-   * Create BinaryStorageAdapter instance without DI
-   */
-  private createBinaryStorageAdapter(config: {
-    baseDir: string;
-    maxCandlesPerBlock?: number;
-  }): BinaryStorageAdapter {
-    // Use a simple approach - create a temporary container just for this instance
-    const tempContainer = new Container();
-    tempContainer
-      .bind(CANDLE_PERSISTENCE_TYPES.StorageConfig)
-      .toConstantValue(config);
-    tempContainer.bind(BinaryStorageAdapter).toSelf();
-
-    return tempContainer.get(BinaryStorageAdapter);
-  }
-
-  /**
-   * Get the active storage implementation
-   */
-  private getActiveStorage(): CandleStoragePort {
-    if (this.useDatabase) {
-      if (!this.sqliteStorage) {
-        throw new Error('SQLite storage not initialized');
+      // Hierarchical file storage is injected via DI
+      if (!this.hierarchicalStorage) {
+        throw new Error(
+          'HierarchicalFileStorage must be injected when useDatabase is false'
+        );
       }
-      return this.sqliteStorage;
-    } else {
-      if (!this.fileStorage) {
-        throw new Error('File storage not initialized');
-      }
-      return this.fileStorage;
     }
   }
 
@@ -134,13 +122,11 @@ export class HybridStorageAdapter implements CandleStoragePort {
       };
       this.sqliteStorage = new SQLiteFlatBufferStorage(sqliteConfig);
       await this.sqliteStorage.initialize();
-    } else if (!useDatabase && !this.fileStorage) {
-      // Initialize file storage
-      const fileConfig = {
-        baseDir: this.config.baseDir,
-        maxCandlesPerBlock: this.config.maxCandlesPerBlock,
-      };
-      this.fileStorage = this.createBinaryStorageAdapter(fileConfig);
+    } else if (!useDatabase && !this.hierarchicalStorage) {
+      // Cannot switch to file mode without DI-injected HierarchicalFileStorage
+      throw new Error(
+        'Cannot switch to file storage mode: HierarchicalFileStorage not available'
+      );
     }
 
     console.log(
@@ -149,10 +135,37 @@ export class HybridStorageAdapter implements CandleStoragePort {
   }
 
   /**
+   * Get the active storage implementation
+   */
+  private getActiveStorage(): CandleStoragePort {
+    if (this.useDatabase) {
+      if (!this.sqliteStorage) {
+        throw new Error('SQLite storage not initialized');
+      }
+      return this.sqliteStorage;
+    } else {
+      if (!this.hierarchicalStorage) {
+        throw new Error('Hierarchical file storage not initialized');
+      }
+      return this.hierarchicalStorage;
+    }
+  }
+
+  /**
    * Get current storage mode
    */
   getStorageMode(): 'database' | 'file' {
     return this.useDatabase ? 'database' : 'file';
+  }
+
+  /**
+   * Get file storage location (only relevant when in file mode)
+   */
+  getFileStorageLocation(): 'local' | 'cloud' | null {
+    if (this.useDatabase) {
+      return null;
+    }
+    return this.config.fileStorageLocation ?? 'local';
   }
 
   /**
@@ -169,7 +182,7 @@ export class HybridStorageAdapter implements CandleStoragePort {
     if (this.useDatabase && this.sqliteStorage) {
       await this.sqliteStorage.initialize();
     }
-    // File storage doesn't need initialization
+    // Hierarchical file storage doesn't need initialization
   }
 
   /**
@@ -179,7 +192,7 @@ export class HybridStorageAdapter implements CandleStoragePort {
     if (this.useDatabase && this.sqliteStorage) {
       await this.sqliteStorage.close();
     }
-    // File storage doesn't need explicit closing
+    // Hierarchical file storage doesn't need explicit closing
   }
 
   // ============================================================================
@@ -252,8 +265,6 @@ export class HybridStorageAdapter implements CandleStoragePort {
    */
   async healthCheck(): Promise<boolean> {
     try {
-      const storage = this.getActiveStorage();
-
       if (
         this.useDatabase &&
         this.sqliteStorage &&
@@ -262,7 +273,7 @@ export class HybridStorageAdapter implements CandleStoragePort {
         return this.sqliteStorage.healthCheck();
       }
 
-      // For file storage, just check if we can access the storage
+      // For hierarchical file storage, just check if we can access the storage
       return true;
     } catch (error) {
       console.error('Storage health check failed:', error);
@@ -282,7 +293,7 @@ export class HybridStorageAdapter implements CandleStoragePort {
       return this.sqliteStorage.getStats();
     }
 
-    // File storage doesn't provide detailed stats
+    // Hierarchical file storage doesn't provide detailed stats yet
     return null;
   }
 
@@ -298,6 +309,6 @@ export class HybridStorageAdapter implements CandleStoragePort {
       await this.sqliteStorage.optimize();
     }
 
-    // File storage doesn't need optimization
+    // Hierarchical file storage doesn't need optimization
   }
 }

@@ -67,6 +67,18 @@ export interface NormalizedStorageConfig {
   /** Use database storage (true) or file storage (false) */
   useDatabase: boolean;
 
+  /** File storage location: 'local' or 'cloud' (only used when useDatabase is false) */
+  fileStorageLocation: 'local' | 'cloud';
+
+  /** Cloud storage configuration (required if fileStorageLocation is 'cloud') */
+  cloud?: {
+    provider: 'gcs';
+    bucketName: string;
+    prefix?: string;
+    projectId?: string;
+    keyFilePath?: string;
+  };
+
   /** Organize databases by exchange */
   organizeByExchange: boolean;
 
@@ -89,6 +101,7 @@ export interface NormalizedStorageConfig {
 export const DEFAULT_STORAGE_CONFIG: Omit<NormalizedStorageConfig, 'baseDir'> =
   {
     useDatabase: true,
+    fileStorageLocation: 'local',
     organizeByExchange: false,
     maxCandlesPerBlock: 1000,
     walMode: true,
@@ -311,6 +324,10 @@ export class StorageConfigValidator {
       baseDir: config.storage.baseDir,
       useDatabase:
         config.storage.useDatabase ?? DEFAULT_STORAGE_CONFIG.useDatabase,
+      fileStorageLocation:
+        config.storage.fileStorageLocation ??
+        DEFAULT_STORAGE_CONFIG.fileStorageLocation,
+      cloud: config.storage.cloud,
       organizeByExchange:
         config.storage.organizeByExchange ??
         DEFAULT_STORAGE_CONFIG.organizeByExchange,

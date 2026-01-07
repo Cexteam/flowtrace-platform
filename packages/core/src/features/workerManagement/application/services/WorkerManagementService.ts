@@ -39,6 +39,36 @@ const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_READY_TIMEOUT = 10000;
 
 /**
+ * Startup configuration for worker spawn retry
+ * Requirements: 4.2, 4.5
+ */
+const STARTUP_CONFIG = {
+  /** Maximum spawn retry attempts during startup */
+  maxSpawnRetries: 3,
+  /** Initial delay between retries in ms */
+  initialRetryDelayMs: 1000,
+  /** Maximum delay between retries in ms */
+  maxRetryDelayMs: 10000,
+  /** Startup timeout in ms */
+  startupTimeoutMs: 60000,
+};
+
+/**
+ * Runtime crash recovery configuration
+ * Requirements: 5.1, 5.2
+ */
+const RUNTIME_CRASH_CONFIG = {
+  /** Maximum crashes allowed within the time window */
+  maxCrashesInWindow: 3,
+  /** Time window for crash counting in ms (5 minutes) */
+  crashWindowMs: 5 * 60 * 1000,
+  /** Initial delay between restart retries in ms */
+  initialRetryDelayMs: 1000,
+  /** Maximum delay between restart retries in ms */
+  maxRetryDelayMs: 10000,
+};
+
+/**
  * Pending request tracking for IPC
  */
 interface PendingRequest {
@@ -63,6 +93,12 @@ export class WorkerManagementService implements WorkerManagementPort {
   private pendingRequests: Map<string, PendingRequest> = new Map();
   private messageCounter = 0;
   private registeredHandlers: Set<string> = new Set();
+
+  // ============ Crash Recovery State (Requirements 5.1, 5.2) ============
+  /** Track crash timestamps per worker for rate limiting */
+  private crashHistory: Map<string, number[]> = new Map();
+  /** Workers that exceeded crash limit and should not be restarted */
+  private permanentlyFailedWorkers: Set<string> = new Set();
 
   constructor(
     @inject(WORKER_MANAGEMENT_TYPES.WorkerThreadPort)
@@ -102,47 +138,98 @@ export class WorkerManagementService implements WorkerManagementPort {
     this.readyWorkers.clear();
     this.readyResolver = null;
     this.readyRejecter = null;
+    this.crashHistory.clear();
+    this.permanentlyFailedWorkers.clear();
 
-    // Spawn workers
-    const spawnPromises: Promise<void>[] = [];
+    // Spawn all workers with retry - fail fast if any worker cannot be spawned
+    const workerIds = Array.from(
+      { length: config.workerCount },
+      (_, i) => `worker_${i}`
+    );
 
-    for (let i = 0; i < config.workerCount; i++) {
-      const workerId = `worker_${i}`;
+    const spawnPromises = workerIds.map(async (workerId) => {
       this.pendingWorkers.add(workerId);
+      try {
+        await this.spawnWorkerWithRetry(workerId);
+      } catch (error) {
+        // Re-throw to fail the entire startup (Requirement 4.3)
+        throw new Error(`Startup failed: ${(error as Error).message}`);
+      }
+    });
 
-      const spawnPromise = this.spawnWorkerUseCase
-        .execute({
-          workerId,
-          scriptPath: config.workerScript,
-          socketPath: config.socketPath,
-        })
-        .then((result) => {
-          if (result.success && result.threadId !== undefined) {
-            const worker = new WorkerThread(workerId, result.threadId);
-            this.workers.set(workerId, worker);
-            this.router.addWorker(workerId);
-            this.setupWorkerHandlers(workerId);
-            logger.info(`Worker ${workerId} spawned, waiting for WORKER_READY`);
-          } else {
-            this.pendingWorkers.delete(workerId);
-            logger.error(`Failed to spawn worker ${workerId}: ${result.error}`);
-          }
-        });
-
-      spawnPromises.push(spawnPromise);
-    }
-
+    // Wait for all spawns - will throw if any fails
     await Promise.all(spawnPromises);
 
     logger.info(
       `Worker pool spawned ${this.workers.size}/${config.workerCount} workers, waiting for readiness signals`
     );
 
-    await this.waitForAllWorkersReady(config.readyTimeout);
+    // Wait for all workers to be ready with timeout (Requirement 4.4, 4.5)
+    const timeoutMs = config.readyTimeout ?? STARTUP_CONFIG.startupTimeoutMs;
+    await this.waitForAllWorkersReady(timeoutMs);
 
     const totalInitTime = Date.now() - this.initStartTime;
     logger.info(
       `Worker pool initialization complete: ${this.workers.size} workers ready in ${totalInitTime}ms`
+    );
+  }
+
+  /**
+   * Spawn a worker with retry logic and exponential backoff
+   * Requirements: 4.1, 4.2, 4.3
+   */
+  private async spawnWorkerWithRetry(workerId: string): Promise<void> {
+    if (!this.config) {
+      throw new Error('Config not initialized');
+    }
+
+    let lastError: Error | undefined;
+
+    for (
+      let attempt = 1;
+      attempt <= STARTUP_CONFIG.maxSpawnRetries;
+      attempt++
+    ) {
+      try {
+        const result = await this.spawnWorkerUseCase.execute({
+          workerId,
+          scriptPath: this.config.workerScript,
+          socketPath: this.config.socketPath,
+        });
+
+        if (result.success && result.threadId !== undefined) {
+          const worker = new WorkerThread(workerId, result.threadId);
+          this.workers.set(workerId, worker);
+          this.router.addWorker(workerId);
+          this.setupWorkerHandlers(workerId);
+          logger.info(
+            `Worker ${workerId} spawned (attempt ${attempt}), waiting for WORKER_READY`
+          );
+          return;
+        }
+
+        lastError = new Error(result.error || 'Unknown spawn error');
+      } catch (error) {
+        lastError = error as Error;
+      }
+
+      if (attempt < STARTUP_CONFIG.maxSpawnRetries) {
+        const delay = Math.min(
+          STARTUP_CONFIG.initialRetryDelayMs * Math.pow(2, attempt - 1),
+          STARTUP_CONFIG.maxRetryDelayMs
+        );
+        logger.warn(
+          `Worker ${workerId} spawn failed (attempt ${attempt}/${STARTUP_CONFIG.maxSpawnRetries}), ` +
+            `retrying in ${delay}ms: ${lastError?.message}`
+        );
+        await this.delay(delay);
+      }
+    }
+
+    // All retries failed - throw to fail startup (Requirement 4.3)
+    this.pendingWorkers.delete(workerId);
+    throw new Error(
+      `Failed to spawn worker ${workerId} after ${STARTUP_CONFIG.maxSpawnRetries} attempts: ${lastError?.message}`
     );
   }
 
@@ -482,45 +569,157 @@ export class WorkerManagementService implements WorkerManagementPort {
   }
 
   private handleWorkerExit(workerId: string, exitCode: number): void {
-    logger.warn(`Worker ${workerId} exited with code ${exitCode}`);
-
     const worker = this.workers.get(workerId);
+
+    // PRESERVE symbols BEFORE markTerminated() - Critical for crash recovery
+    const assignedSymbols = worker?.assignedSymbols ?? [];
+
+    // Log crash event with details (Requirement 3.1)
+    logger.warn(
+      `Worker ${workerId} exited with code ${exitCode}, ` +
+        `symbols: ${assignedSymbols.length} [${assignedSymbols
+          .slice(0, 5)
+          .join(', ')}${assignedSymbols.length > 5 ? '...' : ''}]`
+    );
+
     if (worker) {
       worker.markTerminated();
     }
 
     this.router.removeWorker(workerId);
 
+    // Restart with preserved symbols if non-zero exit (crash)
     if (exitCode !== 0 && this.config) {
-      logger.info(`Attempting to restart worker ${workerId}...`);
-      this.restartWorker(workerId);
+      // Check crash limit before attempting restart (Requirement 5.2)
+      if (this.shouldRetryRestart(workerId)) {
+        this.recordCrash(workerId);
+        logger.info(
+          `Attempting to restart worker ${workerId} with ${assignedSymbols.length} symbols...`
+        );
+        this.restartWorkerWithRetry(workerId, assignedSymbols);
+      } else {
+        logger.error(
+          `Worker ${workerId} exceeded crash limit (${
+            RUNTIME_CRASH_CONFIG.maxCrashesInWindow
+          } crashes in ${RUNTIME_CRASH_CONFIG.crashWindowMs / 60000} min), ` +
+            `marking as permanently failed. Affected symbols: ${assignedSymbols.length}`
+        );
+        this.permanentlyFailedWorkers.add(workerId);
+        // Trades will continue to be buffered for this worker's symbols (if buffering is enabled)
+      }
     }
   }
 
-  private async restartWorker(workerId: string): Promise<void> {
+  /**
+   * Check if we should retry restarting a worker based on crash history
+   * Requirements: 5.2
+   */
+  private shouldRetryRestart(workerId: string): boolean {
+    if (this.permanentlyFailedWorkers.has(workerId)) {
+      return false;
+    }
+
+    const now = Date.now();
+    const crashes = this.crashHistory.get(workerId) ?? [];
+
+    // Filter crashes within the time window
+    const recentCrashes = crashes.filter(
+      (ts) => now - ts < RUNTIME_CRASH_CONFIG.crashWindowMs
+    );
+
+    return recentCrashes.length < RUNTIME_CRASH_CONFIG.maxCrashesInWindow;
+  }
+
+  /**
+   * Record a crash timestamp for rate limiting
+   */
+  private recordCrash(workerId: string): void {
+    const crashes = this.crashHistory.get(workerId) ?? [];
+    crashes.push(Date.now());
+
+    // Keep only recent crashes to avoid memory leak
+    const now = Date.now();
+    const recentCrashes = crashes.filter(
+      (ts) => now - ts < RUNTIME_CRASH_CONFIG.crashWindowMs
+    );
+
+    this.crashHistory.set(workerId, recentCrashes);
+  }
+
+  /**
+   * Restart worker with retry logic and exponential backoff
+   * Requirements: 5.1
+   */
+  private async restartWorkerWithRetry(
+    workerId: string,
+    assignedSymbols: string[]
+  ): Promise<void> {
     if (!this.config) return;
 
-    this.workers.delete(workerId);
-    this.readyWorkers.delete(workerId);
-    this.pendingWorkers.delete(workerId);
-    this.pendingWorkers.add(workerId);
+    let lastError: Error | undefined;
 
-    const result = await this.spawnWorkerUseCase.execute({
-      workerId,
-      scriptPath: this.config.workerScript,
-      socketPath: this.config.socketPath,
-    });
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const result = await this.spawnWorkerUseCase.execute({
+        workerId,
+        scriptPath: this.config.workerScript,
+        socketPath: this.config.socketPath,
+      });
 
-    if (result.success && result.threadId !== undefined) {
-      const worker = new WorkerThread(workerId, result.threadId);
-      this.workers.set(workerId, worker);
-      this.router.addWorker(workerId);
-      this.setupWorkerHandlers(workerId);
-      logger.info(`Worker ${workerId} restarted, waiting for WORKER_READY`);
-    } else {
-      this.pendingWorkers.delete(workerId);
-      logger.error(`Failed to restart worker ${workerId}: ${result.error}`);
+      if (result.success && result.threadId !== undefined) {
+        // Clean up old state
+        this.workers.delete(workerId);
+        this.readyWorkers.delete(workerId);
+        this.pendingWorkers.delete(workerId);
+        this.pendingWorkers.add(workerId);
+
+        // Create new WorkerThread WITH preserved symbols
+        const worker = new WorkerThread(
+          workerId,
+          result.threadId,
+          assignedSymbols
+        );
+        this.workers.set(workerId, worker);
+        this.router.addWorker(workerId);
+        this.setupWorkerHandlers(workerId);
+
+        // Send WORKER_INIT with symbols
+        try {
+          await this.initializeWorker(workerId, {
+            socketPath: this.config.socketPath,
+            assignedSymbols,
+          });
+
+          logger.info(
+            `Worker ${workerId} restarted (attempt ${attempt}), ` +
+              `${assignedSymbols.length} symbols restored, waiting for WORKER_READY`
+          );
+          return;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          logger.warn(
+            `Worker ${workerId} spawn succeeded but init failed (attempt ${attempt}): ${lastError.message}`
+          );
+        }
+      } else {
+        lastError = new Error(result.error || 'Unknown spawn error');
+      }
+
+      if (attempt < 3) {
+        const delay = Math.min(
+          RUNTIME_CRASH_CONFIG.initialRetryDelayMs * Math.pow(2, attempt - 1),
+          RUNTIME_CRASH_CONFIG.maxRetryDelayMs
+        );
+        logger.warn(
+          `Worker ${workerId} restart failed (attempt ${attempt}/3), retrying in ${delay}ms...`
+        );
+        await this.delay(delay);
+      }
     }
+
+    logger.error(
+      `Failed to restart worker ${workerId} after 3 attempts: ${lastError?.message}, ` +
+        `affected symbols: ${assignedSymbols.length}`
+    );
   }
 
   private areAllWorkersReady(): boolean {
@@ -639,5 +838,12 @@ export class WorkerManagementService implements WorkerManagementPort {
     logger.info(
       `Worker ${workerId} initialized with ${config.assignedSymbols.length} symbols`
     );
+  }
+
+  /**
+   * Helper method for async delay
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

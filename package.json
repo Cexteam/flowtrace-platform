@@ -17,5 +17,8 @@
     "tsx": "^4.21.0",
     "turbo": "^2.3.3",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.18.0"
   }
 }

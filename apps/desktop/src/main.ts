@@ -357,8 +357,10 @@ class FlowTraceDesktop {
         : pathModule.join(__dirname, 'main', 'persistence-worker.js');
 
       // Get persistence env vars using PathResolver helper
+      // Set useDatabase: false to use hierarchical file storage instead of SQLite
+      const useDatabase = process.env.FLOWTRACE_USE_DATABASE !== 'false';
       const persistenceEnv = getPersistenceEnv(this.paths, {
-        useDatabase: true,
+        useDatabase,
         healthPort: 3002,
       });
 

@@ -117,13 +117,34 @@ export function getPersistenceEnv(
   paths: DesktopPaths,
   options?: PersistenceEnvOptions
 ): Record<string, string> {
-  return {
+  const env: Record<string, string> = {
     FLOWTRACE_SOCKET_PATH: paths.socketPath,
     FLOWTRACE_RUNTIME_DB_PATH: paths.runtimeDbPath,
     FLOWTRACE_STORAGE_DIR: paths.candleStorageDir,
     FLOWTRACE_USE_DATABASE: String(options?.useDatabase ?? true),
     FLOWTRACE_HEALTH_PORT: String(options?.healthPort ?? 3002),
   };
+
+  // Pass through GCS config from parent process env
+  if (process.env.FLOWTRACE_FILE_STORAGE_LOCATION) {
+    env.FLOWTRACE_FILE_STORAGE_LOCATION =
+      process.env.FLOWTRACE_FILE_STORAGE_LOCATION;
+  }
+  if (process.env.GCS_BUCKET_NAME) {
+    env.GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
+  }
+  if (process.env.GCS_PROJECT_ID) {
+    env.GCS_PROJECT_ID = process.env.GCS_PROJECT_ID;
+  }
+  if (process.env.GCS_PREFIX) {
+    env.GCS_PREFIX = process.env.GCS_PREFIX;
+  }
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    env.GOOGLE_APPLICATION_CREDENTIALS =
+      process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  }
+
+  return env;
 }
 
 /**
@@ -135,6 +156,15 @@ export interface PersistenceWorkerConfig {
   storageBaseDir: string;
   useDatabase: boolean;
   healthCheckPort: number;
+  // GCS cloud storage config
+  fileStorageLocation: 'local' | 'cloud';
+  cloudConfig?: {
+    provider: 'gcs';
+    bucketName: string;
+    projectId?: string;
+    keyFilePath?: string;
+    prefix?: string;
+  };
 }
 
 /**
@@ -163,11 +193,36 @@ export function resolvePersistenceConfig(): PersistenceWorkerConfig {
     throw new Error('FLOWTRACE_STORAGE_DIR environment variable is required');
   }
 
+  // Determine file storage location
+  const fileStorageLocation =
+    (process.env.FLOWTRACE_FILE_STORAGE_LOCATION as 'local' | 'cloud') ||
+    'local';
+
+  // Build cloud config if using GCS
+  let cloudConfig: PersistenceWorkerConfig['cloudConfig'];
+  if (fileStorageLocation === 'cloud') {
+    const bucketName = process.env.GCS_BUCKET_NAME;
+    if (!bucketName) {
+      throw new Error(
+        'GCS_BUCKET_NAME is required when FLOWTRACE_FILE_STORAGE_LOCATION=cloud'
+      );
+    }
+    cloudConfig = {
+      provider: 'gcs',
+      bucketName,
+      projectId: process.env.GCS_PROJECT_ID,
+      keyFilePath: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+      prefix: process.env.GCS_PREFIX || 'flowtrace',
+    };
+  }
+
   return {
     socketPath,
     runtimeDbPath,
     storageBaseDir,
     useDatabase: process.env.FLOWTRACE_USE_DATABASE !== 'false',
     healthCheckPort: parseInt(process.env.FLOWTRACE_HEALTH_PORT || '3002', 10),
+    fileStorageLocation,
+    cloudConfig,
   };
 }

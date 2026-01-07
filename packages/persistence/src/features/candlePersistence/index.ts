@@ -11,6 +11,14 @@ import * as fs from 'fs';
 import { ReadOnlyCandleStorage } from './infrastructure/adapters/ReadOnlyCandleStorage.js';
 import type { CandleReaderPort } from './application/ports/out/CandleReaderPort.js';
 
+// Export ports
+export type { CandleReaderPort } from './application/ports/out/CandleReaderPort.js';
+export type { CandleStoragePort } from './application/ports/out/CandleStoragePort.js';
+export type {
+  FileStoragePort,
+  FileInfo,
+} from './application/ports/out/FileStoragePort.js';
+
 /**
  * Configuration for creating a candle reader
  */

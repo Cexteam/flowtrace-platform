@@ -3,6 +3,22 @@ import { ContainerFactory } from './lib/di/container.js';
 import { APPLICATION_TYPES } from './application/di/module.js';
 
 /**
+ * Cloud storage configuration (GCS only)
+ */
+export interface CloudStorageConfig {
+  /** Cloud provider type (only 'gcs' supported) */
+  provider: 'gcs';
+  /** GCS bucket name */
+  bucketName: string;
+  /** Optional path prefix within bucket */
+  prefix?: string;
+  /** GCS project ID */
+  projectId?: string;
+  /** Path to service account key file (optional, uses ADC if not provided) */
+  keyFilePath?: string;
+}
+
+/**
  * Configuration for bootstrapping the persistence service
  */
 export interface PersistenceBootstrapConfig {
@@ -19,6 +35,12 @@ export interface PersistenceBootstrapConfig {
 
     /** Use SQLite database storage (true) or binary file storage (false). Default: true */
     useDatabase?: boolean;
+
+    /** File storage location: 'local' or 'cloud'. Default: 'local' */
+    fileStorageLocation?: 'local' | 'cloud';
+
+    /** Cloud storage configuration (required if fileStorageLocation is 'cloud') */
+    cloud?: CloudStorageConfig;
 
     /** Organize databases by exchange for better scalability. Default: false */
     organizeByExchange?: boolean;

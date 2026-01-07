@@ -23,6 +23,7 @@
   "dependencies": {
     "@flowtrace/core": "workspace:*",
     "@flowtrace/ipc": "workspace:*",
+    "@google-cloud/storage": "^7.18.0",
     "better-sqlite3": "^11.6.0",
     "flatbuffers": "^24.3.25",
     "inversify": "^6.0.2",

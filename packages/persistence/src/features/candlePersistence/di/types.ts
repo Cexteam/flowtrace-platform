@@ -16,4 +16,20 @@ export const CANDLE_PERSISTENCE_TYPES = {
   StorageConfig: Symbol.for('StorageConfig'),
   UseDatabaseStorage: Symbol.for('UseDatabaseStorage'),
   OrganizeByExchange: Symbol.for('OrganizeByExchange'),
+
+  // Hierarchical File Storage
+  FileStoragePort: Symbol.for('FileStoragePort'),
+  LocalStorageConfig: Symbol.for('LocalStorageConfig'),
+  CloudStorageConfig: Symbol.for('CloudStorageConfig'),
+  HierarchicalFileStorage: Symbol.for('HierarchicalFileStorage'),
+  HierarchicalStorageConfig: Symbol.for('HierarchicalStorageConfig'),
+
+  // Services
+  TimeframePartitionStrategy: Symbol.for('TimeframePartitionStrategy'),
+  IndexManager: Symbol.for('IndexManager'),
+  MetadataManager: Symbol.for('MetadataManager'),
+
+  // Serializers
+  CandleOnlySerializer: Symbol.for('CandleOnlySerializer'),
+  FootprintOnlySerializer: Symbol.for('FootprintOnlySerializer'),
 } as const;

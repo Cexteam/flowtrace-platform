@@ -11,8 +11,21 @@ import { CandlePersistenceService } from '../application/services/CandlePersiste
 import { PersistCandleUseCase } from '../application/use-cases/PersistCandle/PersistCandleUseCase.js';
 import { HybridStorageAdapter } from '../infrastructure/adapters/HybridStorageAdapter.js';
 import type { HybridStorageConfig } from '../infrastructure/adapters/HybridStorageAdapter.js';
+import { LocalFileStorageAdapter } from '../infrastructure/adapters/LocalFileStorageAdapter.js';
+import { CloudFileStorageAdapter } from '../infrastructure/adapters/CloudFileStorageAdapter.js';
+import { HierarchicalFileStorage } from '../infrastructure/adapters/HierarchicalFileStorage.js';
 import type { CandlePersistencePort } from '../application/ports/in/CandlePersistencePort.js';
 import type { CandleStoragePort } from '../application/ports/out/CandleStoragePort.js';
+import type { FileStoragePort } from '../application/ports/out/FileStoragePort.js';
+
+// Hierarchical storage components
+import type {
+  HierarchicalStorageConfig,
+  CloudStorageConfig,
+} from '../../../infrastructure/storage/hierarchical/types.js';
+import { TimeframePartitionStrategy } from '../../../infrastructure/storage/hierarchical/services/TimeframePartitionStrategy.js';
+import { CandleOnlySerializer } from '../../../infrastructure/storage/hierarchical/serializers/CandleOnlySerializer.js';
+import { FootprintOnlySerializer } from '../../../infrastructure/storage/hierarchical/serializers/FootprintOnlySerializer.js';
 
 // Re-export types from types.ts
 export { CANDLE_PERSISTENCE_TYPES } from './types.js';
@@ -27,8 +40,19 @@ export function registerCandlePersistenceBindings(
   container: Container,
   config: NormalizedStorageConfig
 ): void {
-  // Config
-  const hybridConfig: HybridStorageConfig = { ...config };
+  // Config - map NormalizedStorageConfig to HybridStorageConfig
+  // Note: NormalizedStorageConfig uses 'cloud' field, HybridStorageConfig uses 'cloudStorageConfig'
+  const hybridConfig: HybridStorageConfig = {
+    baseDir: config.baseDir,
+    useDatabase: config.useDatabase,
+    fileStorageLocation: config.fileStorageLocation,
+    cloudStorageConfig: config.cloud as CloudStorageConfig | undefined,
+    organizeByExchange: config.organizeByExchange,
+    maxCandlesPerBlock: config.maxCandlesPerBlock,
+    walMode: config.walMode,
+    cacheSize: config.cacheSize,
+    mmapSize: config.mmapSize,
+  };
   container
     .bind<HybridStorageConfig>(CANDLE_PERSISTENCE_TYPES.HybridStorageConfig)
     .toConstantValue(hybridConfig);
@@ -45,6 +69,68 @@ export function registerCandlePersistenceBindings(
   container
     .bind<boolean>(CANDLE_PERSISTENCE_TYPES.OrganizeByExchange)
     .toConstantValue(config.organizeByExchange);
+
+  // Hierarchical storage config
+  const hierarchicalConfig: HierarchicalStorageConfig = {
+    baseDir: config.baseDir,
+    fileStorageLocation: config.fileStorageLocation,
+    cloud: config.cloud as CloudStorageConfig | undefined,
+    autoUpdateMetadata: true,
+  };
+  container
+    .bind<HierarchicalStorageConfig>(
+      CANDLE_PERSISTENCE_TYPES.HierarchicalStorageConfig
+    )
+    .toConstantValue(hierarchicalConfig);
+
+  // Local storage config
+  container
+    .bind(CANDLE_PERSISTENCE_TYPES.LocalStorageConfig)
+    .toConstantValue({ baseDir: config.baseDir });
+
+  // File storage adapter - choose based on fileStorageLocation
+  if (config.fileStorageLocation === 'cloud' && config.cloud) {
+    // Cloud storage (GCS)
+    container
+      .bind<CloudStorageConfig>(CANDLE_PERSISTENCE_TYPES.CloudStorageConfig)
+      .toConstantValue(config.cloud as CloudStorageConfig);
+    container
+      .bind<FileStoragePort>(CANDLE_PERSISTENCE_TYPES.FileStoragePort)
+      .to(CloudFileStorageAdapter)
+      .inSingletonScope();
+  } else {
+    // Local storage (default)
+    container
+      .bind<FileStoragePort>(CANDLE_PERSISTENCE_TYPES.FileStoragePort)
+      .to(LocalFileStorageAdapter)
+      .inSingletonScope();
+  }
+
+  // Hierarchical file storage
+  container
+    .bind<HierarchicalFileStorage>(
+      CANDLE_PERSISTENCE_TYPES.HierarchicalFileStorage
+    )
+    .to(HierarchicalFileStorage)
+    .inSingletonScope();
+
+  // Services
+  container
+    .bind<TimeframePartitionStrategy>(
+      CANDLE_PERSISTENCE_TYPES.TimeframePartitionStrategy
+    )
+    .toConstantValue(new TimeframePartitionStrategy());
+
+  // Serializers
+  container
+    .bind<CandleOnlySerializer>(CANDLE_PERSISTENCE_TYPES.CandleOnlySerializer)
+    .toConstantValue(new CandleOnlySerializer());
+
+  container
+    .bind<FootprintOnlySerializer>(
+      CANDLE_PERSISTENCE_TYPES.FootprintOnlySerializer
+    )
+    .toConstantValue(new FootprintOnlySerializer());
 
   // Storage adapter (outbound port)
   container

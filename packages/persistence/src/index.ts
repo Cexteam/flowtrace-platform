@@ -76,3 +76,33 @@ export {
   createIPCGapReader,
   type IPCGapReaderAdapterConfig,
 } from './features/statePersistence/infrastructure/adapters/IPCGapReaderAdapter.js';
+
+// =============================================================================
+// Hierarchical File Storage - Types and Services
+// =============================================================================
+
+export type {
+  PartitionPattern,
+  PartitionInfo,
+  CandleData,
+  FootprintData,
+  FootprintAgg,
+  IndexData,
+  TimeframeMetadata,
+  CloudProvider,
+  CloudStorageConfig,
+  HierarchicalStorageConfig,
+  PeriodFileHeader,
+} from './infrastructure/storage/hierarchical/index.js';
+
+export {
+  PERIOD_FILE_HEADER_SIZE,
+  PERIOD_FILE_MAGIC,
+  PERIOD_FILE_VERSION,
+  TimeframePartitionStrategy,
+  IndexManager,
+  MetadataManager,
+  CandleOnlySerializer,
+  CANDLE_RECORD_SIZE,
+  FootprintOnlySerializer,
+} from './infrastructure/storage/hierarchical/index.js';
