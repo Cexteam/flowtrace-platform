@@ -87,6 +87,32 @@ export class ProcessTradeUseCase {
       );
     }
 
+    // Check if config changed - set pending config for next 1d complete
+    const currentTickValue = candleGroup.tickValue;
+    const currentBinMultiplier = candleGroup.binMultiplier;
+    const newTickValue = config.tickValue;
+    const newBinMultiplier = config.binMultiplier ?? 1;
+
+    if (
+      currentTickValue !== newTickValue ||
+      currentBinMultiplier !== newBinMultiplier
+    ) {
+      // Config changed - set pending config (will be applied when 1d completes)
+      if (!this.storage.hasPendingConfig(config.symbol)) {
+        this.storage.setPendingConfig(config.symbol, {
+          tickValue: newTickValue,
+          binMultiplier: newBinMultiplier,
+        });
+        logger.info('Config changed - set pending config for 1d complete', {
+          symbol: config.symbol,
+          currentTickValue,
+          currentBinMultiplier,
+          newTickValue,
+          newBinMultiplier,
+        });
+      }
+    }
+
     // Get the 1-second candle (base candle for trade processing)
     const oneSecondCandle = candleGroup.getOneSecondCandle();
 
@@ -151,6 +177,29 @@ export class ProcessTradeUseCase {
               });
           }
         }
+
+        // ============ Duplicate/Out-of-order Detection ============
+        // Skip trades that have already been processed
+        // This handles duplicates during WebSocket rotation overlap
+        if (trade.tradeId <= lastTradeId) {
+          const skipReason =
+            trade.tradeId === lastTradeId ? 'duplicate' : 'out_of_order';
+          logger.debug('Skipping duplicate/out-of-order trade', {
+            symbol: config.symbol,
+            tradeId: trade.tradeId,
+            lastTradeId,
+            skipReason,
+          });
+          return {
+            success: true,
+            candleGroup,
+            completedCandles: [],
+            processingTimeMs: Date.now() - startTime,
+            gapDetected,
+            skipped: true,
+            skipReason,
+          };
+        }
       }
 
       // Always update lastTradeId for ALL trades (not just MARKET)
@@ -179,6 +228,15 @@ export class ProcessTradeUseCase {
     // Check if 1s candle should complete before applying new trade
     // Matches original: check if opentime !== current candle time
     if (shouldComplete(oneSecondCandle, trade.timestamp)) {
+      // DEBUG: Log 1s candle completion
+      logger.debug('1s candle completing', {
+        symbol: config.symbol,
+        candleStartTime: oneSecondCandle.t,
+        tradeTimestamp: trade.timestamp,
+        binsCount: oneSecondCandle.aggs.length,
+        tradeCount: oneSecondCandle.n,
+      });
+
       // Mark current candle as complete (x = true)
       const completionTime = calculateCompletionTime(
         oneSecondCandle.t,
@@ -209,6 +267,24 @@ export class ProcessTradeUseCase {
       for (const completed of rollupResult.completedCandles) {
         completedCandles.push(completed);
         await this.publisher.publishCandleComplete(completed);
+
+        // Check if 1d candle completed - apply pending config if exists
+        if (
+          completed.i === '1d' &&
+          this.storage.hasPendingConfig(config.symbol)
+        ) {
+          const applied = this.storage.applyPendingConfig(config.symbol);
+          if (applied) {
+            logger.info('Applied pending config after 1d candle complete', {
+              symbol: config.symbol,
+            });
+            // Get the new CandleGroup with updated config
+            const newGroup = await this.storage.getCandleGroup(config.symbol);
+            if (newGroup) {
+              candleGroup = newGroup;
+            }
+          }
+        }
       }
 
       // Reset 1s candle for new period
@@ -216,15 +292,23 @@ export class ProcessTradeUseCase {
         config.symbol,
         Timeframe.oneSecond(),
         config.tickValue,
-        config.exchange
+        config.exchange,
+        config.binMultiplier ?? 1
       );
 
       candleGroup.setCandle(Timeframe.oneSecond(), newOneSecond);
+
+      // DEBUG: Log 1s candle reset
+      logger.debug('1s candle reset for new period', {
+        symbol: config.symbol,
+        newCandleStartTime: 0, // Will be set on first trade
+        previousBinsCount: oneSecondCandle.aggs.length,
+      });
     }
 
     // Apply trade to 1s candle
     const currentOneSecond = candleGroup.getOneSecondCandle();
-    currentOneSecond.applyTrade(trade, config.tickValue);
+    currentOneSecond.applyTrade(trade);
 
     // Save updated candle group
     await this.storage.saveCandleGroup(config.symbol, candleGroup);

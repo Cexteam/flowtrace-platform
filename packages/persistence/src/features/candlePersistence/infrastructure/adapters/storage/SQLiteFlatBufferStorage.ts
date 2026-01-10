@@ -1,25 +1,23 @@
 /**
  * SQLite FlatBuffer Storage
- * Implements CandleStoragePort interface using SQLite database with FlatBuffer serialization.
+ * Implements CandleStoragePort interface using SQLite database with FlatBuffer + LZ4 serialization.
  * Provides high-performance storage with concurrent access and efficient querying.
  * This adapter is a thin wrapper that delegates to shared infrastructure components:
  * - ConnectionManager: Database connection management
  * - SchemaManager: Schema creation and migration
  * - IndexManager: Index management and optimization
- * - FlatBufferSerializer: Candle serialization/deserialization
- * - CandleTransformer: Domain ↔ FlatBuffer conversion
+ * - CompressedCandleSerializerPort: Candle serialization/deserialization (FlatBuffer + LZ4)
  * - QueryBuilder: SQL query construction
  */
 
 import type { FootprintCandle } from '@flowtrace/core';
-import type { CandleStoragePort } from '../../application/ports/out/CandleStoragePort.js';
-import { ConnectionManager } from '../../../../infrastructure/storage/sqlite/connection/ConnectionManager.js';
-import type { ConnectionConfig } from '../../../../infrastructure/storage/sqlite/connection/ConnectionManager.js';
-import { SchemaManager } from '../../../../infrastructure/storage/sqlite/schema/SchemaManager.js';
-import { IndexManager } from '../../../../infrastructure/storage/sqlite/indexing/IndexManager.js';
-import { QueryBuilder } from '../../../../infrastructure/storage/sqlite/query/QueryBuilder.js';
-import { FlatBufferSerializer } from '../../../../infrastructure/storage/serialization/flatbuffer/FlatBufferSerializer.js';
-import type { FootprintCandleData } from '../../../../infrastructure/storage/serialization/flatbuffer/FlatBufferSerializer.js';
+import type { CandleStoragePort } from '../../../application/ports/out/CandleStoragePort.js';
+import type { CompressedCandleSerializerPort } from '../../../application/ports/out/CompressedCandleSerializerPort.js';
+import { ConnectionManager } from '../../../../../infrastructure/storage/sqlite/connection/ConnectionManager.js';
+import type { ConnectionConfig } from '../../../../../infrastructure/storage/sqlite/connection/ConnectionManager.js';
+import { SchemaManager } from '../../../../../infrastructure/storage/sqlite/schema/SchemaManager.js';
+import { IndexManager } from '../../../../../infrastructure/storage/sqlite/indexing/IndexManager.js';
+import { QueryBuilder } from '../../../../../infrastructure/storage/sqlite/query/QueryBuilder.js';
 import * as path from 'path';
 
 export interface SQLiteStorageConfig {
@@ -35,6 +33,8 @@ export interface SQLiteStorageConfig {
   cacheSize?: number;
   /** Memory-mapped I/O size in bytes (default: 256MB) */
   mmapSize?: number;
+  /** Compressed candle serializer (optional - uses default if not provided) */
+  serializer?: CompressedCandleSerializerPort;
 }
 
 /**
@@ -93,11 +93,12 @@ export interface StorageSummary {
 
 /**
  * SQLite FlatBuffer Storage Implementation
- * High-performance candle storage using SQLite database with FlatBuffer serialization.
+ * High-performance candle storage using SQLite database with FlatBuffer + LZ4 serialization.
  * Delegates to shared infrastructure components for all operations.
  */
 export class SQLiteFlatBufferStorage implements CandleStoragePort {
-  private config: Required<SQLiteStorageConfig>;
+  private config: Required<Omit<SQLiteStorageConfig, 'serializer'>>;
+  private serializer?: CompressedCandleSerializerPort;
   private connectionManagers: Map<string, ConnectionManager> = new Map();
   private schemaManagers: Map<string, SchemaManager> = new Map();
   private indexManagers: Map<string, IndexManager> = new Map();
@@ -113,6 +114,15 @@ export class SQLiteFlatBufferStorage implements CandleStoragePort {
       cacheSize: config.cacheSize ?? 65536, // 64MB
       mmapSize: config.mmapSize ?? 268435456, // 256MB
     };
+    this.serializer = config.serializer;
+  }
+
+  /**
+   * Set the compressed candle serializer
+   * Can be called after construction to inject the serializer
+   */
+  setSerializer(serializer: CompressedCandleSerializerPort): void {
+    this.serializer = serializer;
   }
 
   /**
@@ -254,86 +264,29 @@ export class SQLiteFlatBufferStorage implements CandleStoragePort {
   }
 
   /**
-   * Serialize candle to FlatBuffer
+   * Serialize candle using CompressedCandleSerializerPort (FlatBuffer + LZ4)
    */
   private serializeCandle(candle: FootprintCandle): Buffer {
-    // Convert FootprintCandle to FlatBuffer-compatible format using CandleTransformer
-    const candleData: FootprintCandleData = {
-      e: candle.e,
-      ex: candle.ex,
-      s: candle.s,
-      i: candle.i,
-      t: candle.t,
-      ct: candle.ct,
-      o: candle.o,
-      h: candle.h,
-      l: candle.l,
-      c: candle.c,
-      v: candle.v,
-      bv: candle.bv,
-      sv: candle.sv,
-      q: candle.q,
-      bq: candle.bq,
-      sq: candle.sq,
-      d: candle.d,
-      dMax: candle.dMax,
-      dMin: candle.dMin,
-      n: candle.n,
-      tv: candle.tv,
-      f: candle.f,
-      ls: candle.ls,
-      x: candle.x,
-      aggs: candle.aggs?.map((agg) => ({
-        tp: agg.tp,
-        v: agg.v,
-        bv: agg.bv,
-        sv: agg.sv,
-        bq: agg.bq ?? 0,
-        sq: agg.sq ?? 0,
-      })),
-    };
-
-    // Delegate to FlatBufferSerializer
-    return FlatBufferSerializer.serializeCandle(candleData);
+    if (!this.serializer) {
+      throw new Error(
+        'CompressedCandleSerializerPort not configured. Call setSerializer() first.'
+      );
+    }
+    const result = this.serializer.serialize(candle);
+    return result.buffer;
   }
 
   /**
-   * Deserialize FlatBuffer to candle
+   * Deserialize candle using CompressedCandleSerializerPort (LZ4 + FlatBuffer)
    */
   private deserializeCandle(buffer: Buffer): FootprintCandle {
-    // Delegate deserialization to FlatBufferSerializer
-    const candleData = FlatBufferSerializer.deserializeCandle(buffer);
-
-    // Convert to FootprintCandle format
-    const candle = {
-      e: candleData.e,
-      ex: candleData.ex || '',
-      s: candleData.s || '',
-      i: candleData.i || '',
-      t: candleData.t || 0,
-      ct: candleData.ct || 0,
-      o: candleData.o || 0,
-      h: candleData.h || 0,
-      l: candleData.l || 0,
-      c: candleData.c || 0,
-      v: candleData.v || 0,
-      bv: candleData.bv || 0,
-      sv: candleData.sv || 0,
-      q: candleData.q || 0,
-      bq: candleData.bq || 0,
-      sq: candleData.sq || 0,
-      d: candleData.d || 0,
-      dMax: candleData.dMax || 0,
-      dMin: candleData.dMin || 0,
-      n: candleData.n || 0,
-      tv: candleData.tv || 0,
-      f: candleData.f || 0,
-      ls: candleData.ls || 0,
-      x: candleData.x || false,
-      aggs: candleData.aggs || [],
-    } as FootprintCandle;
-
-    return candle;
+    if (!this.serializer) {
+      throw new Error(
+        'CompressedCandleSerializerPort not configured. Call setSerializer() first.'
+      );
+    }
+    const result = this.serializer.deserialize(buffer);
+    return result.candle;
   }
 
   // ============================================================================

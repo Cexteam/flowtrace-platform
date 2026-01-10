@@ -11,6 +11,7 @@ export const SYMBOL_MANAGEMENT_TYPES = {
   SymbolManagementPort: Symbol.for('SymbolManagement.SymbolManagementPort'),
 
   // Application Ports (Outbound Ports)
+  ConfigSyncNotifierPort: Symbol.for('SymbolManagement.ConfigSyncNotifierPort'),
   // Note: Exchange-related ports moved to exchangeManagement feature
 
   // Use Cases

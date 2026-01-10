@@ -39,6 +39,7 @@ export type {
   StateResponse,
   GapMessage,
   GapSavePayload,
+  GapSaveBatchPayload,
   GapLoadPayload,
   GapMarkSyncedPayload,
   GapResponse,

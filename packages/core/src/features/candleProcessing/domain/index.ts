@@ -49,5 +49,33 @@ export {
   calculateCompletionTime,
 } from './services/CandleCompletionDetector.js';
 
+export {
+  MAX_BINS_PER_CANDLE,
+  NICE_BASE_FACTORS,
+  NICE_MULTIPLIERS,
+  BinSizeConfig,
+  DEFAULT_BIN_SIZE_CONFIG,
+  OptimalBinSizeResult,
+  generateNiceBinSizes,
+  snapToNiceBinSize,
+  findNiceBinSizeDivisibleBy,
+  calculateOptimalBinSize,
+  calculateEffectiveBinSize,
+  shouldRecalculateBinSize,
+  isNiceBinSize,
+  isValidBinMultiplier,
+  checkMaxBinsWarning,
+  checkMaxBinsWarningRateLimited,
+  // Tier-based bin size optimization
+  SymbolTier,
+  TIER_PRICE_THRESHOLDS,
+  TierConfig,
+  TIER_CONFIGS,
+  BIN_CONSTRAINTS,
+  getSymbolTier,
+  getTierConfig,
+  calculateMinBinSizeForMaxBins,
+} from './services/BinSizeCalculator.js';
+
 // Types
 export { SymbolConfig, createDefaultSymbolConfig } from './types/index.js';

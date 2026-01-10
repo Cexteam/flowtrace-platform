@@ -10,6 +10,7 @@ import { injectable, inject } from 'inversify';
 import type {
   GapPersistencePort,
   SaveGapRequest,
+  SaveGapBatchRequest,
   LoadGapsRequest,
   LoadGapsResult,
   MarkGapsSyncedRequest,
@@ -41,6 +42,15 @@ export class GapPersistenceService implements GapPersistencePort {
    */
   async saveGap(request: SaveGapRequest): Promise<void> {
     await this.saveGapUseCase.execute(request);
+  }
+
+  /**
+   * Save multiple gap records in batch
+   *
+   * @param request - Save gap batch request
+   */
+  async saveGapBatch(request: SaveGapBatchRequest): Promise<void> {
+    await this.gapStorage.saveBatch(request.gaps);
   }
 
   /**

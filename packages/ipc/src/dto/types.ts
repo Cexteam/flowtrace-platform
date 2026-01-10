@@ -104,7 +104,11 @@ export interface StateResponse {
  */
 export interface GapMessage extends IPCMessage {
   type: 'gap';
-  payload: GapSavePayload | GapLoadPayload | GapMarkSyncedPayload;
+  payload:
+    | GapSavePayload
+    | GapSaveBatchPayload
+    | GapLoadPayload
+    | GapMarkSyncedPayload;
 }
 
 /**
@@ -114,6 +118,15 @@ export interface GapMessage extends IPCMessage {
 export interface GapSavePayload {
   action: 'gap_save';
   gap: GapRecordInputDTO;
+}
+
+/**
+ * Payload for saving multiple gap records in batch
+ * Used by queue-based gap persistence to reduce IPC overhead
+ */
+export interface GapSaveBatchPayload {
+  action: 'gap_save_batch';
+  gaps: GapRecordInputDTO[];
 }
 
 /**

@@ -13,6 +13,8 @@ export const CANDLE_PROCESSING_TYPES = {
   CandleProcessingPort: Symbol.for('CandleProcessingPort'),
   StatePersistencePort: Symbol.for('StatePersistencePort'),
   GapPersistencePort: Symbol.for('GapPersistencePort'),
+  BinSizeCalculatorPort: Symbol.for('BinSizeCalculatorPort'),
+  StatePersistenceServicePort: Symbol.for('StatePersistenceServicePort'),
 
   // Use Cases
   ProcessTradeUseCase: Symbol.for('ProcessTradeUseCase'),

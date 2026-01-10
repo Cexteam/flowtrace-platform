@@ -55,6 +55,12 @@ export const SQLITE_MIGRATIONS: MigrationInfo[] = [
     filename: '003_create_worker_assignments.sql',
     filepath: path.join(__dirname, '003_create_worker_assignments.sql'),
   },
+  {
+    version: 4,
+    name: 'add_bin_multiplier',
+    filename: '004_add_bin_multiplier.sql',
+    filepath: path.join(__dirname, '004_add_bin_multiplier.sql'),
+  },
 ];
 
 /**

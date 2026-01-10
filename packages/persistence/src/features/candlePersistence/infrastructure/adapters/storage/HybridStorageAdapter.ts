@@ -11,17 +11,18 @@
 
 import { injectable, inject, optional } from 'inversify';
 import type { FootprintCandle } from '@flowtrace/core';
-import type { CandleStoragePort } from '../../application/ports/out/CandleStoragePort.js';
-import type { FileStoragePort } from '../../application/ports/out/FileStoragePort.js';
+import type { CandleStoragePort } from '../../../application/ports/out/CandleStoragePort.js';
+import type { FileStoragePort } from '../../../application/ports/out/FileStoragePort.js';
+import type { CompressedCandleSerializerPort } from '../../../application/ports/out/CompressedCandleSerializerPort.js';
 import { HierarchicalFileStorage } from './HierarchicalFileStorage.js';
-import { LocalFileStorageAdapter } from './LocalFileStorageAdapter.js';
+import { LocalFileStorageAdapter } from '../file/LocalFileStorageAdapter.js';
 import { SQLiteFlatBufferStorage } from './SQLiteFlatBufferStorage.js';
 import type { SQLiteStorageConfig } from './SQLiteFlatBufferStorage.js';
 import type {
   CloudStorageConfig,
   HierarchicalStorageConfig,
-} from '../../../../infrastructure/storage/hierarchical/types.js';
-import { CANDLE_PERSISTENCE_TYPES } from '../../di/types.js';
+} from '../../../../../infrastructure/storage/hierarchical/types.js';
+import { CANDLE_PERSISTENCE_TYPES } from '../../../di/types.js';
 
 export interface HybridStorageConfig {
   /** Base directory for storage files */
@@ -72,13 +73,16 @@ export class HybridStorageAdapter implements CandleStoragePort {
     config: HybridStorageConfig,
     @inject(CANDLE_PERSISTENCE_TYPES.HierarchicalFileStorage)
     @optional()
-    private hierarchicalStorage?: HierarchicalFileStorage
+    private hierarchicalStorage?: HierarchicalFileStorage,
+    @inject(CANDLE_PERSISTENCE_TYPES.CompressedCandleSerializerPort)
+    @optional()
+    private serializer?: CompressedCandleSerializerPort
   ) {
     this.config = config;
     this.useDatabase = config.useDatabase ?? true;
 
     if (this.useDatabase) {
-      // Initialize SQLite storage
+      // Initialize SQLite storage with serializer
       const sqliteConfig: SQLiteStorageConfig = {
         baseDir: config.baseDir,
         organizeByExchange: config.organizeByExchange,
@@ -86,6 +90,7 @@ export class HybridStorageAdapter implements CandleStoragePort {
         walMode: config.walMode,
         cacheSize: config.cacheSize,
         mmapSize: config.mmapSize,
+        serializer: this.serializer,
       };
       this.sqliteStorage = new SQLiteFlatBufferStorage(sqliteConfig);
     } else {
@@ -111,7 +116,7 @@ export class HybridStorageAdapter implements CandleStoragePort {
     this.useDatabase = useDatabase;
 
     if (useDatabase && !this.sqliteStorage) {
-      // Initialize SQLite storage
+      // Initialize SQLite storage with serializer
       const sqliteConfig: SQLiteStorageConfig = {
         baseDir: this.config.baseDir,
         organizeByExchange: this.config.organizeByExchange,
@@ -119,6 +124,7 @@ export class HybridStorageAdapter implements CandleStoragePort {
         walMode: this.config.walMode,
         cacheSize: this.config.cacheSize,
         mmapSize: this.config.mmapSize,
+        serializer: this.serializer,
       };
       this.sqliteStorage = new SQLiteFlatBufferStorage(sqliteConfig);
       await this.sqliteStorage.initialize();

@@ -3,9 +3,19 @@
  * Request/response types for trade routing business logic
  */
 
+/**
+ * Symbol configuration for trade processing
+ */
+export interface SymbolTradeConfig {
+  exchange: string;
+  tickValue: number;
+  binMultiplier?: number | null;
+}
+
 export interface RouteTradesRequest {
   symbol: string;
   trades: unknown[];
+  config?: SymbolTradeConfig;
   priority?: 'urgent' | 'normal';
   batchId?: string;
   timestamp?: Date;

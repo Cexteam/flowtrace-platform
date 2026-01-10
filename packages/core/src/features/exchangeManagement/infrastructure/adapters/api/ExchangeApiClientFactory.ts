@@ -3,11 +3,16 @@
  *
  * Factory pattern to create exchange API clients based on exchange type.
  * Uses DI container to get adapters (which inject ExchangeManagementPort for config).
+ *
+ * Hexagonal Architecture:
+ * - Implements Port Out (ExchangeApiPort)
+ * - Provides access to exchange API clients
  */
 
 import { injectable, inject } from 'inversify';
 import type { Exchange } from '../../../domain/types/Exchange.js';
 import type { ExchangeApiClient } from '../../../application/ports/out/ExchangeApiClient.js';
+import type { ExchangeApiPort } from '../../../application/ports/out/ExchangeApiPort.js';
 import { EXCHANGE_MANAGEMENT_TYPES } from '../../../../../shared/lib/di/bindings/features/exchangeManagement/types.js';
 import { createLogger } from '../../../../../shared/lib/logger/logger.js';
 
@@ -16,9 +21,12 @@ const logger = createLogger('ExchangeApiClientFactory');
 /**
  * Factory for creating exchange API clients
  * Clients are injected via DI to get config from database
+ *
+ * Implements ExchangeApiPort to allow Use Cases to access exchange clients
+ * without depending on infrastructure directly.
  */
 @injectable()
-export class ExchangeApiClientFactory {
+export class ExchangeApiClientFactory implements ExchangeApiPort {
   private clients: Map<Exchange, ExchangeApiClient> = new Map();
 
   constructor(

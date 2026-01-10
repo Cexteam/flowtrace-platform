@@ -26,19 +26,30 @@ export class WebSocketManager {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private onReconnectCallback?: () => Promise<void>;
 
+  /** Timestamp when connection was established */
+  private connectionStartTime: number | null = null;
+
+  /** Unique identifier for this connection instance */
+  private readonly connectionId: string;
+
   constructor(
     private url: string,
     private reconnectDelay = 5000,
     private maxDelay = 60000,
     private maxReconnectAttempts = 300
   ) {
+    // Generate unique connection ID
+    this.connectionId = `ws-${Date.now()}-${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+
     // Register default error handler
     this.registerMessageHandler('error', (error) => {
       logger.error('WebSocket error received', error);
     });
 
     // Register default ping handler
-    this.registerMessageHandler('ping', (data) => {
+    this.registerMessageHandler('ping', (_data) => {
       logger.debug('Received pong from server');
     });
   }
@@ -65,6 +76,7 @@ export class WebSocketManager {
     this.isConnected = false;
     this.isReconnecting = false;
     this.reconnectAttempts = 0;
+    this.connectionStartTime = null;
 
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
@@ -77,7 +89,7 @@ export class WebSocketManager {
       this.ws = null;
     }
 
-    logger.info('WebSocket disconnected');
+    logger.info('WebSocket disconnected', { connectionId: this.connectionId });
   }
 
   /**
@@ -127,7 +139,36 @@ export class WebSocketManager {
       isReconnecting: this.isReconnecting,
       reconnectAttempts: this.reconnectAttempts,
       url: this.url,
+      connectionId: this.connectionId,
+      connectionStartTime: this.connectionStartTime,
+      connectionAge: this.getConnectionAge(),
     };
+  }
+
+  /**
+   * Get connection age in milliseconds
+   * Returns 0 if not connected
+   */
+  getConnectionAge(): number {
+    if (!this.connectionStartTime || !this.isConnected) {
+      return 0;
+    }
+    return Date.now() - this.connectionStartTime;
+  }
+
+  /**
+   * Get connection start time
+   * Returns null if not connected
+   */
+  getConnectionStartTime(): number | null {
+    return this.connectionStartTime;
+  }
+
+  /**
+   * Get unique connection ID
+   */
+  getConnectionId(): string {
+    return this.connectionId;
   }
 
   /**
@@ -150,8 +191,11 @@ export class WebSocketManager {
           this.isConnected = true;
           this.isReconnecting = false;
           this.reconnectAttempts = 0;
+          this.connectionStartTime = Date.now();
 
-          logger.info('WebSocket connection established');
+          logger.info('WebSocket connection established', {
+            connectionId: this.connectionId,
+          });
 
           // Start heartbeat
           this.startHeartbeat();

@@ -18,9 +18,9 @@ import { injectable, inject } from 'inversify';
 import type {
   FileStoragePort,
   FileInfo,
-} from '../../application/ports/out/FileStoragePort.js';
-import type { CloudStorageConfig } from '../../../../infrastructure/storage/hierarchical/types.js';
-import { CANDLE_PERSISTENCE_TYPES } from '../../di/types.js';
+} from '../../../application/ports/out/FileStoragePort.js';
+import type { CloudStorageConfig } from '../../../../../infrastructure/storage/hierarchical/types.js';
+import { CANDLE_PERSISTENCE_TYPES } from '../../../di/types.js';
 
 /** Default retry options */
 const DEFAULT_RETRY_OPTIONS = {

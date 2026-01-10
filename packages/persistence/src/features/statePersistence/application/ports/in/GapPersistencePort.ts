@@ -19,6 +19,13 @@ export interface SaveGapRequest {
 }
 
 /**
+ * Request for saving multiple gap records in batch
+ */
+export interface SaveGapBatchRequest {
+  gaps: GapRecordInputDTO[];
+}
+
+/**
  * Request for loading gap records
  */
 export interface LoadGapsRequest {
@@ -49,6 +56,13 @@ export interface GapPersistencePort {
    * @param request - Save gap request
    */
   saveGap(request: SaveGapRequest): Promise<void>;
+
+  /**
+   * Save multiple gap records in batch
+   *
+   * @param request - Save gap batch request
+   */
+  saveGapBatch(request: SaveGapBatchRequest): Promise<void>;
 
   /**
    * Load gap records with optional filtering

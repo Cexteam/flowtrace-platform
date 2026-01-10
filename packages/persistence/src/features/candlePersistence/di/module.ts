@@ -9,11 +9,11 @@ import type { NormalizedStorageConfig } from '../../../lib/validation/StorageCon
 // Feature components
 import { CandlePersistenceService } from '../application/services/CandlePersistenceService.js';
 import { PersistCandleUseCase } from '../application/use-cases/PersistCandle/PersistCandleUseCase.js';
-import { HybridStorageAdapter } from '../infrastructure/adapters/HybridStorageAdapter.js';
-import type { HybridStorageConfig } from '../infrastructure/adapters/HybridStorageAdapter.js';
-import { LocalFileStorageAdapter } from '../infrastructure/adapters/LocalFileStorageAdapter.js';
-import { CloudFileStorageAdapter } from '../infrastructure/adapters/CloudFileStorageAdapter.js';
-import { HierarchicalFileStorage } from '../infrastructure/adapters/HierarchicalFileStorage.js';
+import { HybridStorageAdapter } from '../infrastructure/adapters/storage/HybridStorageAdapter.js';
+import type { HybridStorageConfig } from '../infrastructure/adapters/storage/HybridStorageAdapter.js';
+import { LocalFileStorageAdapter } from '../infrastructure/adapters/file/LocalFileStorageAdapter.js';
+import { CloudFileStorageAdapter } from '../infrastructure/adapters/file/CloudFileStorageAdapter.js';
+import { HierarchicalFileStorage } from '../infrastructure/adapters/storage/HierarchicalFileStorage.js';
 import type { CandlePersistencePort } from '../application/ports/in/CandlePersistencePort.js';
 import type { CandleStoragePort } from '../application/ports/out/CandleStoragePort.js';
 import type { FileStoragePort } from '../application/ports/out/FileStoragePort.js';
@@ -26,6 +26,10 @@ import type {
 import { TimeframePartitionStrategy } from '../../../infrastructure/storage/hierarchical/services/TimeframePartitionStrategy.js';
 import { CandleOnlySerializer } from '../../../infrastructure/storage/hierarchical/serializers/CandleOnlySerializer.js';
 import { FootprintOnlySerializer } from '../../../infrastructure/storage/hierarchical/serializers/FootprintOnlySerializer.js';
+
+// Compressed serializer
+import type { CompressedCandleSerializerPort } from '../application/ports/out/CompressedCandleSerializerPort.js';
+import { CompressedCandleSerializerAdapter } from '../infrastructure/adapters/serialization/CompressedCandleSerializerAdapter.js';
 
 // Re-export types from types.ts
 export { CANDLE_PERSISTENCE_TYPES } from './types.js';
@@ -131,6 +135,14 @@ export function registerCandlePersistenceBindings(
       CANDLE_PERSISTENCE_TYPES.FootprintOnlySerializer
     )
     .toConstantValue(new FootprintOnlySerializer());
+
+  // Compressed candle serializer (FlatBuffer + LZ4)
+  container
+    .bind<CompressedCandleSerializerPort>(
+      CANDLE_PERSISTENCE_TYPES.CompressedCandleSerializerPort
+    )
+    .to(CompressedCandleSerializerAdapter)
+    .inSingletonScope();
 
   // Storage adapter (outbound port)
   container

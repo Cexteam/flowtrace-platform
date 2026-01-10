@@ -176,6 +176,36 @@ export {
   UpdatedGroupCandles,
   shouldComplete,
   calculateCompletionTime,
+
+  // Bin Size Calculator
+  MAX_BINS_PER_CANDLE,
+  NICE_BASE_FACTORS,
+  NICE_MULTIPLIERS,
+  DEFAULT_BIN_SIZE_CONFIG,
+  generateNiceBinSizes,
+  snapToNiceBinSize,
+  findNiceBinSizeDivisibleBy,
+  calculateOptimalBinSize,
+  calculateEffectiveBinSize,
+  shouldRecalculateBinSize,
+  isNiceBinSize,
+  isValidBinMultiplier,
+  checkMaxBinsWarning,
+  checkMaxBinsWarningRateLimited,
+  // Tier-based bin size optimization
+  TIER_PRICE_THRESHOLDS,
+  TIER_CONFIGS,
+  BIN_CONSTRAINTS,
+  getSymbolTier,
+  getTierConfig,
+  calculateMinBinSizeForMaxBins,
+} from './features/candleProcessing/domain/index.js';
+
+export type {
+  BinSizeConfig,
+  OptimalBinSizeResult,
+  SymbolTier,
+  TierConfig,
 } from './features/candleProcessing/domain/index.js';
 
 // All deployments now use IPC-based persistence via SQLite.

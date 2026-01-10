@@ -12,6 +12,9 @@ import { Timeframe } from '../value-objects/Timeframe.js';
 import { FootprintCandle } from '../entities/FootprintCandle.js';
 import { CandleGroup } from '../entities/CandleGroup.js';
 import { mergeAggs } from './FootprintCalculator.js';
+import { createLogger } from '../../../../shared/lib/logger/logger.js';
+
+const logger = createLogger('TimeframeRollup');
 
 /**
  * Result of a rollup operation
@@ -92,6 +95,18 @@ export function UpdatedGroupCandles(
       if (currentCandle.t > 0 && currentCandle.n > 0) {
         currentCandle.x = true;
         completedCandles.push(currentCandle.clone());
+
+        // DEBUG: Log higher timeframe candle completion
+        if (timeframeName === '1m' && iCandle.s === 'BTCUSDT') {
+          logger.debug('Higher TF candle completing (new period)', {
+            symbol: iCandle.s,
+            timeframe: timeframeName,
+            oldCandleTime: currentCandle.t,
+            newOpentime: opentime,
+            binsCount: currentCandle.aggs.length,
+            tradeCount: currentCandle.n,
+          });
+        }
       }
 
       // Then reset candle with new period data
@@ -168,6 +183,18 @@ export function UpdatedGroupCandles(
 
       // Merge footprint bins using Cal2AggsFootprint logic
       const rsAggs = mergeAggs(iCandle.aggs, currentCandle.aggs);
+
+      // DEBUG: Log bins merge for BTCUSDT 1m
+      if (timeframeName === '1m' && iCandle.s === 'BTCUSDT') {
+        logger.debug('Merging bins for higher TF', {
+          symbol: iCandle.s,
+          timeframe: timeframeName,
+          incomingBins: iCandle.aggs.length,
+          currentBins: currentCandle.aggs.length,
+          mergedBins: rsAggs.length,
+        });
+      }
+
       currentCandle.aggs = JSON.parse(JSON.stringify(rsAggs));
 
       // Check for completion: if checkTime !== opentime

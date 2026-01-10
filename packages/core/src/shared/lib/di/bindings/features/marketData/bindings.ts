@@ -25,6 +25,7 @@ import { TradeIngestionService } from '../../../../../../features/marketData/app
 // Application Layer - Ports
 import { TradeIngestionPort } from '../../../../../../features/marketData/application/ports/in/TradeIngestionPort.js';
 import { TradeStreamPort } from '../../../../../../features/marketData/application/ports/out/TradeStreamPort.js';
+import type { ExchangeConfigPort } from '../../../../../../features/marketData/application/ports/out/ExchangeConfigPort.js';
 
 // Application Layer - Use Cases
 import { AddSymbolsToIngestionUseCase } from '../../../../../../features/marketData/application/use-cases/AddSymbolsToIngestion/AddSymbolsToIngestionUseCase.js';
@@ -32,6 +33,7 @@ import { RemoveSymbolsFromIngestionUseCase } from '../../../../../../features/ma
 
 // Infrastructure Adapters
 import { BinanceWsTradeStreamAdapter } from '../../../../../../features/marketData/infrastructure/adapters/index.js';
+import { ExchangeConfigAdapter } from '../../../../../../features/marketData/infrastructure/adapters/ExchangeConfigAdapter.js';
 
 /**
  * Configure MarketData core bindings
@@ -77,5 +79,11 @@ export function configureMarketDataCore(container: Container): void {
   container
     .bind<TradeStreamPort>(MARKET_DATA_TYPES.TradeStreamPort)
     .to(BinanceWsTradeStreamAdapter)
+    .inSingletonScope();
+
+  // ExchangeConfigPort → ExchangeConfigAdapter (Port Out binding)
+  container
+    .bind<ExchangeConfigPort>(MARKET_DATA_TYPES.ExchangeConfigPort)
+    .to(ExchangeConfigAdapter)
     .inSingletonScope();
 }

@@ -238,6 +238,12 @@ export interface RuntimeDB {
   saveGap(gap: GapRecordInputDTO): void;
 
   /**
+   * Save multiple gap records in a single transaction
+   * @param gaps - Array of gap records to save
+   */
+  saveGapBatch(gaps: GapRecordInputDTO[]): void;
+
+  /**
    * Load gap records with optional filtering
    * @param options - Filter options
    */

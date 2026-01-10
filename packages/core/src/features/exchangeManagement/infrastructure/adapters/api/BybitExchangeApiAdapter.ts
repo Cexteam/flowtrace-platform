@@ -233,6 +233,58 @@ export class BybitExchangeApiAdapter implements ExchangeApiClient {
   }
 
   /**
+   * Fetch current prices for all symbols
+   * Uses /v5/market/tickers endpoint
+   */
+  async fetchPrices(): Promise<Map<string, number>> {
+    try {
+      const baseUrl = await this.getBaseUrl();
+      logger.debug('Fetching prices from Bybit');
+
+      const response = await fetch(
+        `${baseUrl}/v5/market/tickers?category=linear`
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Bybit API error: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const data = (await response.json()) as {
+        retCode: number;
+        retMsg: string;
+        result: {
+          list: Array<{
+            symbol: string;
+            lastPrice: string;
+          }>;
+        };
+      };
+
+      if (data.retCode !== 0) {
+        throw new Error(`Bybit API error: ${data.retMsg}`);
+      }
+
+      const priceMap = new Map<string, number>();
+      for (const item of data.result.list) {
+        priceMap.set(item.symbol, parseFloat(item.lastPrice));
+      }
+
+      logger.info(`Fetched ${priceMap.size} prices from Bybit`);
+      return priceMap;
+    } catch (error: any) {
+      logger.error('Failed to fetch prices from Bybit:', error);
+      throw new ExchangeApiError(
+        'bybit',
+        error.statusCode,
+        'Failed to fetch prices',
+        error
+      );
+    }
+  }
+
+  /**
    * Map Bybit symbol to normalized ExchangeSymbol
    */
   private mapToExchangeSymbol(bybitSymbol: BybitSymbolInfo): ExchangeSymbol {

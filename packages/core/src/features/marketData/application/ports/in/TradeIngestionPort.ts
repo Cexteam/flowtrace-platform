@@ -27,6 +27,13 @@ export interface TradeIngestionPort {
     message?: string;
   }>;
 
+  // Config Management
+  /**
+   * Reload cached config for specific symbols
+   * Called after symbol sync when config (tickValue, binMultiplier) changes
+   */
+  reloadSymbolConfigs(symbols: string[]): Promise<void>;
+
   // Monitoring & Status
   getStatus(): Promise<IngestionStatus>;
 

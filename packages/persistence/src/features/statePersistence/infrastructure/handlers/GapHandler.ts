@@ -12,6 +12,7 @@ import {
   type GapMessage,
   type GapResponse,
   type GapSavePayload,
+  type GapSaveBatchPayload,
   type GapLoadPayload,
   type GapMarkSyncedPayload,
 } from '@flowtrace/ipc';
@@ -22,6 +23,11 @@ import { STATE_PERSISTENCE_TYPES } from '../../di/types.js';
 const GapSavePayloadSchema = z.object({
   action: z.literal('gap_save'),
   gap: GapRecordInputDTOSchema,
+});
+
+const GapSaveBatchPayloadSchema = z.object({
+  action: z.literal('gap_save_batch'),
+  gaps: z.array(GapRecordInputDTOSchema),
 });
 
 const GapLoadPayloadSchema = z.object({
@@ -81,6 +87,8 @@ export class GapHandler {
       switch (action) {
         case 'gap_save':
           return await this.handleSave(payload as GapSavePayload);
+        case 'gap_save_batch':
+          return await this.handleSaveBatch(payload as GapSaveBatchPayload);
         case 'gap_load':
           return await this.handleLoad(payload as GapLoadPayload);
         case 'gap_mark_synced':
@@ -116,6 +124,20 @@ export class GapHandler {
   private async handleSave(payload: GapSavePayload): Promise<GapResponse> {
     const validated = GapSavePayloadSchema.parse(payload);
     await this.gapPersistence.saveGap({ gap: validated.gap });
+    return { success: true };
+  }
+
+  /**
+   * Handle gap/save_batch action
+   */
+  private async handleSaveBatch(
+    payload: GapSaveBatchPayload
+  ): Promise<GapResponse> {
+    const validated = GapSaveBatchPayloadSchema.parse(payload);
+    await this.gapPersistence.saveGapBatch({ gaps: validated.gaps });
+    this.logger.info('[GapHandler] Batch saved', {
+      count: validated.gaps.length,
+    });
     return { success: true };
   }
 

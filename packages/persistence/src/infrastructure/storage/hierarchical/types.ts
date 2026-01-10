@@ -101,6 +101,8 @@ export interface FootprintData {
   n: number;
   /** Tick value */
   tv: number;
+  /** Bin multiplier */
+  bm: number;
   /** Price level aggregations */
   aggs: FootprintAgg[];
 }

@@ -1,0 +1,47 @@
+namespace FlowTrace.FlatBuffers;
+
+/// CandleOnly schema - optimized for OHLCV data without footprint aggregations
+/// Used for candles/ files in hierarchical storage
+/// Magic bytes: FTCO (0x46 0x54 0x43 0x4F)
+
+table CandleOnly {
+  // Time fields
+  t: int64;        // open timestamp
+  ct: int64;       // close timestamp
+  
+  // Identifiers
+  s: string;       // symbol - primary trading symbol/contract (e.g., "BTCUSDT", "VN30F2501")
+  s1: string;      // underlying/root symbol for linking related instruments (e.g., "BTC", "VN30")
+  i: string;       // interval/timeframe
+  
+  // OHLCV
+  o: double;       // open
+  h: double;       // high
+  l: double;       // low
+  c: double;       // close
+  v: double;       // volume
+  
+  // Buy/Sell volumes
+  bv: double;      // buy volume
+  sv: double;      // sell volume
+  
+  // Quote volumes
+  q: double;       // quote volume
+  bq: double;      // buy quote volume
+  sq: double;      // sell quote volume
+  
+  // Delta
+  d: double;       // delta
+  dMax: double;    // delta max
+  dMin: double;    // delta min
+  
+  // Trade count
+  n: int64;        // number of trades
+}
+
+table CandleOnlyBatch {
+  candles: [CandleOnly];
+  count: int32;
+}
+
+root_type CandleOnly;

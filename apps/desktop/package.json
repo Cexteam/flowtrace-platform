@@ -6,6 +6,8 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
+    "postinstall": "npx @electron/rebuild -f -w better-sqlite3",
+    "rebuild:native": "npx @electron/rebuild -f -w better-sqlite3",
     "build": "tsc && tsc -p tsconfig.preload.json",
     "build:clean": "rm -rf dist && tsc && tsc -p tsconfig.preload.json",
     "build:core": "pnpm --filter @flowtrace/core build",
@@ -16,10 +18,10 @@
     "build:all": "pnpm build:packages && pnpm build",
     "build:fresh": "pnpm build:packages && pnpm build:clean",
     "build:ui": "pnpm --filter @flowtrace/ui build:electron",
-    "start": "electron dist/main.js",
-    "start:dev": "NODE_ENV=development electron dist/main.js",
-    "dev": "pnpm build:fresh && NODE_ENV=development electron dist/main.js",
-    "dev:full": "pnpm build:fresh && concurrently -n ui,electron -c blue,green \"pnpm --filter @flowtrace/ui dev\" \"wait-on http://localhost:3000 && NODE_ENV=development electron dist/main.js\"",
+    "start": "node check-native.js && electron dist/main.js",
+    "start:dev": "node check-native.js && NODE_ENV=development electron dist/main.js",
+    "dev": "pnpm build:fresh && node check-native.js && NODE_ENV=development electron dist/main.js",
+    "dev:full": "pnpm -w build && pnpm build:clean && concurrently -n ui,electron -c blue,green \"pnpm --filter @flowtrace/ui dev\" \"wait-on http://localhost:3000 && NODE_ENV=development electron dist/main.js\"",
     "dev:watch": "concurrently \"pnpm build:watch\" \"wait-on dist/main.js && NODE_ENV=development electron .\"",
     "build:watch": "tsc --watch",
     "test": "jest --config jest.config.cjs --passWithNoTests",
@@ -30,7 +32,7 @@
     "dist:win": "pnpm build:all && pnpm build:ui && electron-builder --win",
     "dist:mac": "pnpm build:all && pnpm build:ui && electron-builder --mac",
     "dist:linux": "pnpm build:all && pnpm build:ui && electron-builder --linux",
-    "rebuild": "electron-rebuild -f -w better-sqlite3"
+    "rebuild": "npx @electron/rebuild -f -w better-sqlite3"
   },
   "dependencies": {
     "@flowtrace/api": "workspace:*",

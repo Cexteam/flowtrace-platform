@@ -10,11 +10,15 @@
  * - Graceful shutdown with full state flush
  * - Extract lastTradeId from loaded states for gap detection
  *
+ * Hexagonal Architecture:
+ * - Implements Port In (StatePersistenceServicePort)
+ * - Uses Port Out (CandleStoragePort, StatePersistencePort)
  */
 
 import { injectable, inject } from 'inversify';
 import type { CandleStoragePort } from '../ports/out/CandleStoragePort.js';
 import type { StatePersistencePort } from '../ports/out/StatePersistencePort.js';
+import type { StatePersistenceServicePort } from '../ports/in/StatePersistenceServicePort.js';
 import { CandleGroup } from '../../domain/entities/CandleGroup.js';
 import { CANDLE_PROCESSING_TYPES } from '../../../../shared/lib/di/core/types.js';
 import { createLogger } from '../../../../shared/lib/logger/logger.js';
@@ -36,9 +40,11 @@ export interface StatePersistenceServiceConfig {
 /**
  * StatePersistenceService
  * Manages CandleGroup state persistence via IPC in worker thread
+ *
+ * Implements StatePersistenceServicePort (Port In)
  */
 @injectable()
-export class StatePersistenceService {
+export class StatePersistenceService implements StatePersistenceServicePort {
   private flushInterval: NodeJS.Timeout | null = null;
   private readonly exchange: string;
   private readonly FLUSH_INTERVAL_MS: number;
@@ -216,11 +222,17 @@ export class StatePersistenceService {
       return;
     }
 
+    const startTime = Date.now();
+    const batchCount = Math.ceil(dirtyGroups.length / this.BATCH_SIZE);
+
     logger.info('Flushing dirty states', {
       dirtyCount: dirtyGroups.length,
       batchSize: this.BATCH_SIZE,
-      batchCount: Math.ceil(dirtyGroups.length / this.BATCH_SIZE),
+      batchCount,
     });
+
+    let successCount = 0;
+    let failedCount = 0;
 
     // Process in batches
     for (let i = 0; i < dirtyGroups.length; i += this.BATCH_SIZE) {
@@ -238,12 +250,14 @@ export class StatePersistenceService {
         for (const { symbol } of batch) {
           this.candleStorage.markClean(symbol);
         }
+        successCount += batch.length;
 
         logger.debug('Flushed batch', {
           batchIndex: Math.floor(i / this.BATCH_SIZE),
           batchSize: batch.length,
         });
       } catch (error) {
+        failedCount += batch.length;
         logger.error('Failed to flush batch', {
           batchIndex: Math.floor(i / this.BATCH_SIZE),
           error: error instanceof Error ? error.message : String(error),
@@ -252,6 +266,15 @@ export class StatePersistenceService {
         // Continue with other batches
       }
     }
+
+    const durationMs = Date.now() - startTime;
+    logger.info('State flush completed', {
+      totalStates: dirtyGroups.length,
+      successCount,
+      failedCount,
+      batchCount,
+      durationMs,
+    });
   }
 
   /**

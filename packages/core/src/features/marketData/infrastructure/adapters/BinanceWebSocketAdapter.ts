@@ -2,8 +2,16 @@
  * BinanceWebSocketAdapter
  *
  * Receives trades from Binance WebSocket and forwards them to workers.
- * Exchange config (URLs, reconnect settings) loaded from database via ExchangeRepository.
+ * Exchange config (URLs, reconnect settings) loaded via ExchangeConfigPort.
  *
+ * Zero-Gap Reconnection:
+ * - Uses ConnectionRotator for proactive dual-connection strategy
+ * - Deduplication handled by ProcessTradeUseCase in worker thread
+ * - Ensures no trade gaps when Binance disconnects after 24h
+ *
+ * Hexagonal Architecture:
+ * - Implements Port Out (TradeStreamPort)
+ * - Uses Port Out (ExchangeConfigPort) for cross-feature config access
  */
 
 import { injectable, inject } from 'inversify';
@@ -14,44 +22,74 @@ import {
 import _ from 'lodash';
 const { cloneDeep } = _;
 import { TradeStreamPort } from '../../application/ports/out/TradeStreamPort.js';
+import type {
+  ExchangeConfigPort,
+  ExchangeConfig,
+} from '../../application/ports/out/ExchangeConfigPort.js';
 import { WebSocketConnectionStatus } from '../../domain/types/index.js';
-import { EXCHANGE_MANAGEMENT_SYMBOLS } from '../../../../shared/lib/di/bindings/features/exchangeManagement/types.js';
+import { MARKET_DATA_TYPES } from '../../../../shared/lib/di/bindings/features/marketData/types.js';
 import { WebSocketManager } from '../services/index.js';
+import {
+  ConnectionRotator,
+  WebSocketManagerFactory,
+} from '../services/ConnectionRotator.js';
+import { getRotationConfig } from '../services/RotationConfig.js';
 import { createLogger } from '../../../../shared/lib/logger/logger.js';
-import type { ExchangeRepository } from '../../../exchangeManagement/domain/repositories/ExchangeRepository.js';
-import type { Exchange } from '../../../exchangeManagement/domain/entities/Exchange.js';
 
 const logger = createLogger('BinanceWsTradeStreamAdapter');
+
+/**
+ * Extended WebSocket connection status with rotation info
+ */
+export interface ExtendedWebSocketConnectionStatus
+  extends WebSocketConnectionStatus {
+  rotationEnabled: boolean;
+  isRotating: boolean;
+  connectionAge: number;
+  nextRotationTime: number | null;
+  rotationCount: number;
+  failedRotationCount: number;
+  secondaryConnectionStatus?: {
+    isConnected: boolean;
+    connectionAge: number;
+  };
+}
 
 /**
  * BinanceWsTradeStreamAdapter
  *
  * Receives trades from Binance WebSocket and forwards them to workers.
- * Gap detection is now handled in worker thread by ProcessTradeUseCase.
+ * Uses ConnectionRotator for zero-gap reconnection strategy.
+ * Deduplication is handled in worker thread by ProcessTradeUseCase.
  */
 @injectable()
 export class BinanceWsTradeStreamAdapter implements TradeStreamPort {
   private activeSymbols: string[] = [];
   private tradeCallback?: (trades: Trades[]) => void;
-  private wsManager?: WebSocketManager;
+  private connectionRotator?: ConnectionRotator;
 
   // Cached exchange config (lazy loaded)
-  private exchangeConfig: Exchange | null = null;
+  private exchangeConfig: ExchangeConfig | null = null;
 
   // Trade buffer for batching (kept for sequential processing)
   private tradeBuffer = new Map<string, Trade[]>();
 
+  // Processing flags per symbol
+  private processingSymbols = new Set<string>();
+
   constructor(
-    @inject(EXCHANGE_MANAGEMENT_SYMBOLS.ExchangeRepository)
-    private exchangeRepository: ExchangeRepository
+    @inject(MARKET_DATA_TYPES.ExchangeConfigPort)
+    private exchangeConfigPort: ExchangeConfigPort
   ) {}
 
   /**
    * Get exchange config (lazy loading with cache)
    */
-  private async getExchangeConfig(): Promise<Exchange> {
+  private async getExchangeConfig(): Promise<ExchangeConfig> {
     if (!this.exchangeConfig) {
-      this.exchangeConfig = await this.exchangeRepository.findById('binance');
+      this.exchangeConfig = await this.exchangeConfigPort.getExchangeConfig(
+        'binance'
+      );
       if (!this.exchangeConfig) {
         throw new Error('Binance exchange config not found in database');
       }
@@ -77,66 +115,75 @@ export class BinanceWsTradeStreamAdapter implements TradeStreamPort {
     // Get config from database (lazy loading)
     const config = await this.getExchangeConfig();
     const wsUrl = config.wsUrl;
+    const rotationConfig = getRotationConfig();
 
-    this.wsManager = new WebSocketManager(
+    // Create WebSocketManager factory
+    const wsManagerFactory: WebSocketManagerFactory = (url: string) => {
+      return new WebSocketManager(
+        url,
+        5000,
+        config.maxReconnectDelay,
+        config.maxConnectAttempts
+      );
+    };
+
+    // Create ConnectionRotator
+    this.connectionRotator = new ConnectionRotator(
       wsUrl,
-      5000,
-      config.maxReconnectDelay,
-      config.maxConnectAttempts
+      wsManagerFactory,
+      rotationConfig
     );
 
-    this.wsManager.registerMessageHandler('stream', (data: any) => {
-      this.handleTradeMessage(data);
-    });
-
-    // Register reconnect callback to re-subscribe active symbols
-    this.wsManager.setOnReconnect(async () => {
-      if (this.activeSymbols.length > 0) {
-        logger.info(
-          `Re-subscribing to ${this.activeSymbols.length} symbols after reconnect...`
-        );
-        const streams = this.activeSymbols.map(
-          (s) => `${s.toLowerCase()}@trade`
-        );
-        await this.sendSubscribeCommand(streams);
-        logger.info(
-          `Successfully re-subscribed to ${this.activeSymbols.length} symbols`
-        );
+    // Set up trade message handler with deduplication
+    this.connectionRotator.setOnTradeMessage(
+      (data: any, connectionId: string) => {
+        this.handleTradeMessage(data, connectionId);
       }
+    );
+
+    // Set up subscribe callback
+    this.connectionRotator.setOnSubscribe(async (manager, syms) => {
+      const streams = syms.map((s) => `${s.toLowerCase()}@trade`);
+      await this.sendSubscribeCommandToManager(manager, streams);
     });
 
-    await this.wsManager.connect();
+    // Start with symbols
+    await this.connectionRotator.start(symbols);
 
-    if (symbols.length > 0) {
-      const streams = symbols.map((s) => `${s.toLowerCase()}@trade`);
-      await this.sendSubscribeCommand(streams);
-    }
+    logger.info('BinanceWsTradeStreamAdapter connected', {
+      symbols: symbols.length,
+      rotationEnabled: rotationConfig.enabled,
+    });
   }
 
   async disconnect(): Promise<void> {
     this.activeSymbols = [];
     this.tradeBuffer.clear();
-    if (this.wsManager) await this.wsManager.disconnect();
+    if (this.connectionRotator) {
+      await this.connectionRotator.stop();
+      this.connectionRotator = undefined;
+    }
   }
 
   /**
    * Handle incoming trade message from WebSocket
-   * Simply forwards trades to callback - gap detection is in worker thread
+   * Deduplication is handled by ProcessTradeUseCase in worker thread
    */
-  private handleTradeMessage(rawData: any): void {
+  private handleTradeMessage(rawData: any, _connectionId: string): void {
     try {
       const data = cloneDeep(rawData);
 
       // Basic validation - must have event type, symbol, and trade ID
       if (!data.e || !data.s || data.t === undefined) return;
       const symbol = data.s.toUpperCase();
+      const tradeId = data.t;
 
       const trade: Trade = {
         e: data.e,
         E: data.E,
         T: data.T,
         s: symbol,
-        t: data.t,
+        t: tradeId,
         p: data.p || '0',
         q: data.q || '0',
         X: data.X,
@@ -151,7 +198,7 @@ export class BinanceWsTradeStreamAdapter implements TradeStreamPort {
 
   /**
    * Process trades and forward to callback
-   * Gap detection is now handled in worker thread by ProcessTradeUseCase
+   * Gap detection is handled in worker thread by ProcessTradeUseCase
    */
   private async processTrades(symbol: string, trades: Trade[]): Promise<void> {
     if (trades.length === 0) return;
@@ -169,75 +216,24 @@ export class BinanceWsTradeStreamAdapter implements TradeStreamPort {
   async subscribeSymbols(symbols: string[]): Promise<void> {
     if (symbols.length === 0) return;
 
-    // If WebSocket not connected yet, connect first (handles standby mode)
-    if (!this.wsManager) {
+    // If ConnectionRotator not initialized, connect first (handles standby mode)
+    if (!this.connectionRotator) {
       logger.info(
-        'WebSocket not connected, connecting for dynamic symbol subscription...'
+        'ConnectionRotator not initialized, connecting for dynamic symbol subscription...'
       );
-      await this.connectForDynamicSubscription(symbols);
+      await this.connect(symbols);
       return;
     }
 
-    const streams = symbols.map((s) => `${s.toLowerCase()}@trade`);
-    await this.sendSubscribeCommand(streams);
+    await this.connectionRotator.subscribeSymbols(symbols);
     this.activeSymbols.push(...symbols);
     logger.info(`Subscribed to additional ${symbols.length} symbols`);
   }
 
-  /**
-   * Connect WebSocket for dynamic symbol subscription
-   * Used when service started in standby mode (no initial symbols)
-   */
-  private async connectForDynamicSubscription(
-    symbols: string[]
-  ): Promise<void> {
-    // Get config from database (lazy loading)
-    const config = await this.getExchangeConfig();
-    const wsUrl = config.wsUrl;
-
-    this.wsManager = new WebSocketManager(
-      wsUrl,
-      5000,
-      config.maxReconnectDelay,
-      config.maxConnectAttempts
-    );
-
-    this.wsManager.registerMessageHandler('stream', (data: any) => {
-      this.handleTradeMessage(data);
-    });
-
-    // Register reconnect callback to re-subscribe active symbols
-    this.wsManager.setOnReconnect(async () => {
-      if (this.activeSymbols.length > 0) {
-        logger.info(
-          `Re-subscribing to ${this.activeSymbols.length} symbols after reconnect...`
-        );
-        const streams = this.activeSymbols.map(
-          (s) => `${s.toLowerCase()}@trade`
-        );
-        await this.sendSubscribeCommand(streams);
-        logger.info(
-          `Successfully re-subscribed to ${this.activeSymbols.length} symbols`
-        );
-      }
-    });
-
-    await this.wsManager.connect();
-
-    // Subscribe to the requested symbols
-    const streams = symbols.map((s) => `${s.toLowerCase()}@trade`);
-    await this.sendSubscribeCommand(streams);
-    this.activeSymbols.push(...symbols);
-
-    logger.info(
-      `WebSocket connected and subscribed to ${symbols.length} symbols (dynamic subscription)`
-    );
-  }
-
   async unsubscribeSymbols(symbols: string[]): Promise<void> {
-    if (symbols.length === 0 || !this.wsManager) return;
-    const streams = symbols.map((s) => `${s.toLowerCase()}@trade`);
-    await this.sendUnsubscribeCommand(streams);
+    if (symbols.length === 0 || !this.connectionRotator) return;
+
+    await this.connectionRotator.unsubscribeSymbols(symbols);
     this.activeSymbols = this.activeSymbols.filter(
       (s) => !symbols.includes(s.toUpperCase())
     );
@@ -245,7 +241,7 @@ export class BinanceWsTradeStreamAdapter implements TradeStreamPort {
   }
 
   getStatus(): WebSocketConnectionStatus {
-    if (!this.wsManager) {
+    if (!this.connectionRotator) {
       return {
         isConnected: false,
         connectionUrl: '',
@@ -253,37 +249,84 @@ export class BinanceWsTradeStreamAdapter implements TradeStreamPort {
         reconnectCount: 0,
       };
     }
-    const connStatus = this.wsManager.getConnectionStatus();
+
+    const rotatorStatus = this.connectionRotator.getStatus();
+    const primaryManager = this.connectionRotator.getPrimaryManager();
+
     return {
-      isConnected: connStatus.isConnected,
-      connectionUrl: connStatus.url,
+      isConnected: rotatorStatus.primaryConnection?.isConnected ?? false,
+      connectionUrl: primaryManager
+        ? primaryManager.getConnectionStatus().url
+        : '',
       lastHeartbeat: Date.now(),
-      reconnectCount: connStatus.reconnectAttempts,
+      reconnectCount: rotatorStatus.rotationCount,
+    };
+  }
+
+  /**
+   * Get extended status with rotation info
+   */
+  getExtendedStatus(): ExtendedWebSocketConnectionStatus {
+    const baseStatus = this.getStatus();
+
+    if (!this.connectionRotator) {
+      return {
+        ...baseStatus,
+        rotationEnabled: false,
+        isRotating: false,
+        connectionAge: 0,
+        nextRotationTime: null,
+        rotationCount: 0,
+        failedRotationCount: 0,
+      };
+    }
+
+    const rotatorStatus = this.connectionRotator.getStatus();
+
+    return {
+      ...baseStatus,
+      rotationEnabled: rotatorStatus.enabled,
+      isRotating: rotatorStatus.isRotating,
+      connectionAge: rotatorStatus.primaryConnection?.connectionAge ?? 0,
+      nextRotationTime: rotatorStatus.nextRotationTime,
+      rotationCount: rotatorStatus.rotationCount,
+      failedRotationCount: rotatorStatus.failedRotationCount,
+      secondaryConnectionStatus: rotatorStatus.secondaryConnection
+        ? {
+            isConnected: rotatorStatus.secondaryConnection.isConnected,
+            connectionAge: rotatorStatus.secondaryConnection.connectionAge,
+          }
+        : undefined,
     };
   }
 
   isHealthy(): boolean {
-    if (!this.wsManager) return false;
-    const status = this.wsManager.getConnectionStatus();
-    return status.isConnected && this.activeSymbols.length > 0;
+    if (!this.connectionRotator) return false;
+    const status = this.connectionRotator.getStatus();
+    return (
+      (status.primaryConnection?.isConnected ?? false) &&
+      this.activeSymbols.length > 0
+    );
   }
 
   /**
    * Subscribe to streams in batches to avoid "Payload too long" error
    * Binance WebSocket has ~4KB payload limit, so we batch 50 streams per message
    */
-  private async sendSubscribeCommand(streams: string[]): Promise<void> {
-    const BATCH_SIZE = 50; // Safe batch size to stay under 4KB payload limit
-    const BATCH_DELAY_MS = 100; // Small delay between batches to avoid rate limiting
+  private async sendSubscribeCommandToManager(
+    manager: WebSocketManager,
+    streams: string[]
+  ): Promise<void> {
+    const BATCH_SIZE = 50;
+    const BATCH_DELAY_MS = 100;
 
     if (streams.length <= BATCH_SIZE) {
-      // Small enough to send in one message
       const subscribeMessage = {
         method: 'SUBSCRIBE',
         params: streams,
         id: Date.now(),
       };
-      await this.wsManager!.send(subscribeMessage);
+      await manager.send(subscribeMessage);
       logger.info(`Subscribed to ${streams.length} streams in single batch`);
       return;
     }
@@ -303,16 +346,15 @@ export class BinanceWsTradeStreamAdapter implements TradeStreamPort {
       const subscribeMessage = {
         method: 'SUBSCRIBE',
         params: batch,
-        id: Date.now() + i, // Unique ID for each batch
+        id: Date.now() + i,
       };
-      await this.wsManager!.send(subscribeMessage);
+      await manager.send(subscribeMessage);
       logger.debug(
         `Sent subscribe batch ${i + 1}/${batches.length} (${
           batch.length
         } streams)`
       );
 
-      // Add delay between batches (except for last batch)
       if (i < batches.length - 1) {
         await this.sleep(BATCH_DELAY_MS);
       }
@@ -324,19 +366,6 @@ export class BinanceWsTradeStreamAdapter implements TradeStreamPort {
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
-
-  private async sendUnsubscribeCommand(streams: string[]): Promise<void> {
-    const unsubscribeMessage = {
-      method: 'UNSUBSCRIBE',
-      params: streams,
-      id: Date.now(),
-    };
-    await this.wsManager!.send(unsubscribeMessage);
-  }
-
-  // Trade buffer for batching - kept for sequential processing
-  // Use per-symbol processing flags to avoid blocking other symbols
-  private processingSymbols = new Set<string>();
 
   private bufferTrade(symbol: string, trade: Trade): void {
     // Add to buffer
@@ -352,20 +381,15 @@ export class BinanceWsTradeStreamAdapter implements TradeStreamPort {
   }
 
   private async processBufferedTrades(symbol: string): Promise<void> {
-    // Check if this symbol is already being processed
     if (this.processingSymbols.has(symbol)) return;
 
     this.processingSymbols.add(symbol);
 
     try {
-      // Keep processing until buffer is empty
-      // This handles trades that arrive while we're processing
       while (true) {
         const buffer = this.tradeBuffer.get(symbol);
         if (!buffer || buffer.length === 0) break;
 
-        // Process all buffered trades - send ALL trades to worker for gap detection
-        // MARKET filtering happens in FootprintCandle.applyTrade()
         const tradesToProcess: Trade[] = [];
         while (buffer.length > 0) {
           const trade = buffer.shift()!;

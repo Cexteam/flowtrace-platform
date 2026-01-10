@@ -23,4 +23,8 @@ export const MARKET_DATA_TYPES = {
   ),
   // Hexagonal Ports
   SnapshotPersistencePort: Symbol.for('MarketData.SnapshotPersistencePort'),
+  ExchangeConfigPort: Symbol.for('MarketData.ExchangeConfigPort'),
+
+  // Zero-Gap WebSocket Reconnection
+  ConnectionRotator: Symbol.for('MarketData.ConnectionRotator'),
 } as const;

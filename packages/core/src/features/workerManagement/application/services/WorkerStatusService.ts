@@ -14,7 +14,6 @@ import {
 } from '../ports/in/WorkerStatusPort.js';
 import { WorkerManagementPort } from '../ports/in/WorkerManagementPort.js';
 import { WorkerThreadPort } from '../ports/out/WorkerThreadPort.js';
-import { WorkerThread } from '../../domain/entities/WorkerThread.js';
 import { CheckWorkerHealthUseCase } from '../use-cases/CheckWorkerHealth/index.js';
 import { GetSystemHealthUseCase } from '../use-cases/GetSystemHealth/index.js';
 import { createLogger } from '../../../../shared/lib/logger/logger.js';
@@ -46,47 +45,29 @@ export class WorkerStatusService implements WorkerStatusPort {
   // ============================================================================
 
   getPoolStatus(): WorkerPoolStatus {
-    // Access internal state from WorkerManagementService
-    const internalState = (
-      this.workerManagementPort as any
-    ).getInternalState?.();
+    // Use proper Port In methods instead of type casting
+    const workers = this.workerManagementPort.getAllWorkers();
+    const startTime = this.workerManagementPort.getPoolStartTime();
+    const readyWorkerIds = this.workerManagementPort.getReadyWorkerIds();
+    const pendingWorkerIds = this.workerManagementPort.getPendingWorkerIds();
 
-    if (!internalState) {
-      // Fallback if getInternalState is not available
-      const workerIds = this.workerThreadPort.getAllWorkerIds();
-      return {
-        totalWorkers: workerIds.length,
-        healthyWorkers: workerIds.length,
-        unhealthyWorkers: 0,
-        workers: [],
-        uptimeSeconds: 0,
-        totalEventsPublished: 0,
-        readyWorkers: workerIds.length,
-        pendingWorkers: [],
-      };
-    }
+    const healthyWorkers = workers.filter((w) => w.isHealthy).length;
+    const unhealthyWorkers = workers.length - healthyWorkers;
 
-    const { workers, startTime, readyWorkers, pendingWorkers } = internalState;
-    const workerArray = Array.from(
-      (workers as Map<string, WorkerThread>).values()
-    );
-    const healthyWorkers = workerArray.filter((w) => w.isHealthy).length;
-    const unhealthyWorkers = workerArray.length - healthyWorkers;
-
-    const totalEventsPublished = workerArray.reduce(
+    const totalEventsPublished = workers.reduce(
       (sum: number, w) => sum + (w.healthMetrics?.eventsPublished || 0),
       0
     );
 
     return {
-      totalWorkers: workerArray.length,
+      totalWorkers: workers.length,
       healthyWorkers,
       unhealthyWorkers,
-      workers: workerArray,
+      workers,
       uptimeSeconds: Math.floor((Date.now() - startTime.getTime()) / 1000),
       totalEventsPublished,
-      readyWorkers: readyWorkers.size,
-      pendingWorkers: Array.from(pendingWorkers),
+      readyWorkers: readyWorkerIds.length,
+      pendingWorkers: pendingWorkerIds,
     };
   }
 
@@ -95,16 +76,11 @@ export class WorkerStatusService implements WorkerStatusPort {
   }
 
   areAllWorkersReady(): boolean {
-    const internalState = (
-      this.workerManagementPort as any
-    ).getInternalState?.();
+    // Use proper Port In methods instead of type casting
+    const pendingWorkerIds = this.workerManagementPort.getPendingWorkerIds();
+    const readyWorkerIds = this.workerManagementPort.getReadyWorkerIds();
 
-    if (!internalState) {
-      return this.workerThreadPort.getAllWorkerIds().length > 0;
-    }
-
-    const { pendingWorkers, readyWorkers } = internalState;
-    return pendingWorkers.size === 0 && readyWorkers.size > 0;
+    return pendingWorkerIds.length === 0 && readyWorkerIds.length > 0;
   }
 
   // ============================================================================
@@ -207,7 +183,17 @@ export class WorkerStatusService implements WorkerStatusPort {
 
     // Warn if we're below 80% healthy workers
     if (result.healthRatio < 80) {
-      logger.warn(`🚨 CRITICAL: Only ${result.healthRatio}% workers healthy!`);
+      const unhealthyWorkers = result.results.filter((r) => !r.isHealthy);
+      logger.warn(`🚨 CRITICAL: Only ${result.healthRatio}% workers healthy!`, {
+        healthyWorkers: result.healthyWorkers,
+        totalWorkers: result.totalWorkers,
+        unhealthyWorkerIds: unhealthyWorkers.map((w) => w.workerId),
+        unhealthyDetails: unhealthyWorkers.map((w) => ({
+          workerId: w.workerId,
+          error: w.error,
+          metrics: w.metrics,
+        })),
+      });
     }
   }
 }

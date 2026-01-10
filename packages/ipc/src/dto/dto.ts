@@ -122,6 +122,10 @@ export interface FootprintCandleDTO {
   dMin: number;
   /** Tick value for binning */
   tv: number;
+  /** Bin multiplier for footprint aggregation (NEW) */
+  bm?: number;
+  /** Effective bin size = tv × bm (NEW) */
+  ebs?: number;
   /** Price bins (footprint data) */
   aggs: AggsDTO[];
   /** First trade ID */

@@ -99,6 +99,19 @@ export interface SendMessageOptions {
 }
 
 // ============================================================================
+// Config Types
+// ============================================================================
+
+/**
+ * Symbol configuration for trade processing
+ */
+export interface SymbolTradeConfig {
+  exchange: string;
+  tickValue: number;
+  binMultiplier?: number | null;
+}
+
+// ============================================================================
 // Result Types
 // ============================================================================
 
@@ -198,13 +211,17 @@ export interface WorkerManagementPort {
    *
    * @param symbol - Trading symbol
    * @param trades - Array of trade data
-   * @param options - Optional routing configuration
+   * @param options - Optional routing configuration including symbol config
    * @returns Promise resolving to routing result
    */
   routeTrades(
     symbol: string,
     trades: unknown[],
-    options?: { priority?: 'urgent' | 'normal'; batchId?: string }
+    options?: {
+      priority?: 'urgent' | 'normal';
+      batchId?: string;
+      config?: SymbolTradeConfig;
+    }
   ): Promise<RouteTradesResult>;
 
   /**
@@ -257,4 +274,36 @@ export interface WorkerManagementPort {
    * @returns true if worker exists, false otherwise
    */
   hasWorker(workerId: string): boolean;
+
+  // ============ Status Query Methods ============
+
+  /**
+   * Get all workers with their status
+   * Used by WorkerStatusService to get pool status without type casting
+   *
+   * @returns Array of all worker threads in the pool
+   */
+  getAllWorkers(): WorkerThread[];
+
+  /**
+   * Get pool start time
+   * Used by WorkerStatusService to calculate uptime
+   *
+   * @returns Date when the pool was initialized
+   */
+  getPoolStartTime(): Date;
+
+  /**
+   * Get IDs of workers that are ready
+   *
+   * @returns Array of worker IDs that have signaled ready
+   */
+  getReadyWorkerIds(): string[];
+
+  /**
+   * Get IDs of workers that are pending (not yet ready)
+   *
+   * @returns Array of worker IDs that haven't signaled ready yet
+   */
+  getPendingWorkerIds(): string[];
 }

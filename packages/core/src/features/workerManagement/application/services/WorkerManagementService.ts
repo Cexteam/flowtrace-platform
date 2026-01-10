@@ -313,11 +313,20 @@ export class WorkerManagementService implements WorkerManagementPort {
   async routeTrades(
     symbol: string,
     trades: unknown[],
-    options?: { priority?: 'urgent' | 'normal'; batchId?: string }
+    options?: {
+      priority?: 'urgent' | 'normal';
+      batchId?: string;
+      config?: {
+        exchange: string;
+        tickValue: number;
+        binMultiplier?: number | null;
+      };
+    }
   ): Promise<RouteTradesResult> {
     const request: RouteTradesRequest = {
       symbol,
       trades,
+      config: options?.config,
       priority: options?.priority,
       batchId: options?.batchId,
       timestamp: new Date(),
@@ -473,7 +482,42 @@ export class WorkerManagementService implements WorkerManagementPort {
     return this.workers.has(workerId);
   }
 
+  // ============================================================================
+  // Status Query Methods (for WorkerStatusService - proper Port In methods)
+  // ============================================================================
+
   /**
+   * Get all workers with their status
+   * Used by WorkerStatusService to get pool status without type casting
+   */
+  getAllWorkers(): WorkerThread[] {
+    return Array.from(this.workers.values());
+  }
+
+  /**
+   * Get pool start time
+   * Used by WorkerStatusService to calculate uptime
+   */
+  getPoolStartTime(): Date {
+    return this.startTime;
+  }
+
+  /**
+   * Get IDs of workers that are ready
+   */
+  getReadyWorkerIds(): string[] {
+    return Array.from(this.readyWorkers);
+  }
+
+  /**
+   * Get IDs of workers that are pending (not yet ready)
+   */
+  getPendingWorkerIds(): string[] {
+    return Array.from(this.pendingWorkers);
+  }
+
+  /**
+   * @deprecated Use getAllWorkers(), getPoolStartTime(), getReadyWorkerIds(), getPendingWorkerIds() instead
    * Get internal state for WorkerStatusService
    */
   getInternalState(): {

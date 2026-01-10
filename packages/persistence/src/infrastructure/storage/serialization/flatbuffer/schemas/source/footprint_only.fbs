@@ -1,0 +1,41 @@
+namespace FlowTrace.FlatBuffers;
+
+/// FootprintOnly schema - optimized for footprint aggregation data
+/// Used for footprints/ files in hierarchical storage
+/// Magic bytes: FTFO (0x46 0x54 0x46 0x4F)
+
+/// Footprint aggregation at a specific price level
+table FootprintAgg {
+  tp: double;      // tick price
+  v: double;       // volume
+  bv: double;      // buy volume
+  sv: double;      // sell volume
+  bq: double;      // buy quote
+  sq: double;      // sell quote
+}
+
+table FootprintOnly {
+  // Time fields
+  t: int64;        // open timestamp
+  ct: int64;       // close timestamp
+  
+  // Identifiers
+  s: string;       // symbol - primary trading symbol/contract (e.g., "BTCUSDT", "VN30F2501")
+  s1: string;      // underlying/root symbol for linking related instruments (e.g., "BTC", "VN30")
+  i: string;       // interval/timeframe
+  
+  // Footprint metadata
+  n: int64;        // number of trades
+  tv: double;      // tick value
+  bm: double;      // bin multiplier
+  
+  // Footprint aggregations
+  aggs: [FootprintAgg];
+}
+
+table FootprintOnlyBatch {
+  footprints: [FootprintOnly];
+  count: int32;
+}
+
+root_type FootprintOnly;

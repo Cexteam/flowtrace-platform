@@ -53,4 +53,8 @@ export interface ProcessTradeResult {
   processingTimeMs: number;
   /** Gap detection result (if a gap was detected) */
   gapDetected?: GapDetectionResult;
+  /** Whether the trade was skipped (duplicate or out-of-order) */
+  skipped?: boolean;
+  /** Reason for skipping the trade */
+  skipReason?: 'duplicate' | 'out_of_order';
 }

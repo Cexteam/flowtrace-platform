@@ -55,6 +55,13 @@ export class RouteTradesUseCase {
         data: {
           symbol,
           trades,
+          config: request.config
+            ? {
+                exchange: request.config.exchange,
+                tickValue: request.config.tickValue,
+                binMultiplier: request.config.binMultiplier,
+              }
+            : undefined,
           options: {
             priority,
             batchId,

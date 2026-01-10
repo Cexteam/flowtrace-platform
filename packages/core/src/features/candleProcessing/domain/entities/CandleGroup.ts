@@ -32,9 +32,18 @@ export class CandleGroup {
   constructor(
     public readonly symbol: string,
     public readonly exchange: string,
-    public readonly tickValue: number
+    public readonly tickValue: number,
+    public readonly binMultiplier: number = 1
   ) {
     this.candles = new Map();
+  }
+
+  /**
+   * Get effective bin size for footprint calculation
+   * effectiveBinSize = tickValue × binMultiplier
+   */
+  get effectiveBinSize(): number {
+    return this.tickValue * this.binMultiplier;
   }
 
   /**
@@ -56,7 +65,8 @@ export class CandleGroup {
         this.symbol,
         timeframe,
         this.tickValue,
-        this.exchange
+        this.exchange,
+        this.binMultiplier
       );
       this.candles.set(key, candle);
     }
@@ -65,33 +75,10 @@ export class CandleGroup {
   }
 
   /**
-   * Get candle by timeframe name
-   */
-  getCandleByName(timeframeName: string): FootprintCandle | undefined {
-    return this.candles.get(timeframeName);
-  }
-
-  /**
    * Set candle for a specific timeframe
    */
   setCandle(timeframe: Timeframe, candle: FootprintCandle): void {
     this.candles.set(timeframe.name, candle);
-  }
-
-  /**
-   * Set candle by timeframe name
-   */
-  setCandleByName(timeframeName: string, candle: FootprintCandle): void {
-    this.candles.set(timeframeName, candle);
-  }
-
-  /**
-   * Get all timeframes that have candles
-   */
-  getAllTimeframes(): Timeframe[] {
-    return Array.from(this.candles.keys())
-      .filter((name) => Timeframe.isValid(name))
-      .map((name) => new Timeframe(name));
   }
 
   /**
@@ -105,44 +92,15 @@ export class CandleGroup {
   }
 
   /**
-   * Reset candle for a timeframe using data from another candle
-   */
-  resetCandle(timeframe: Timeframe, fromCandle: FootprintCandle): void {
-    const newCandle = FootprintCandle.createEmpty(
-      this.symbol,
-      timeframe,
-      this.tickValue,
-      this.exchange
-    );
-
-    // Initialize with the source candle's data
-    newCandle.t = fromCandle.t;
-    newCandle.o = fromCandle.o;
-    newCandle.h = fromCandle.h;
-    newCandle.l = fromCandle.l;
-    newCandle.c = fromCandle.c;
-    newCandle.v = fromCandle.v;
-    newCandle.bv = fromCandle.bv;
-    newCandle.sv = fromCandle.sv;
-    newCandle.q = fromCandle.q;
-    newCandle.bq = fromCandle.bq;
-    newCandle.sq = fromCandle.sq;
-    newCandle.n = fromCandle.n;
-    newCandle.d = fromCandle.d;
-    newCandle.dMax = fromCandle.dMax;
-    newCandle.dMin = fromCandle.dMin;
-    newCandle.f = fromCandle.f;
-    newCandle.ls = fromCandle.ls;
-    newCandle.aggs = JSON.parse(JSON.stringify(fromCandle.aggs));
-
-    this.candles.set(timeframe.name, newCandle);
-  }
-
-  /**
    * Clone this CandleGroup
    */
   clone(): CandleGroup {
-    const cloned = new CandleGroup(this.symbol, this.exchange, this.tickValue);
+    const cloned = new CandleGroup(
+      this.symbol,
+      this.exchange,
+      this.tickValue,
+      this.binMultiplier
+    );
 
     for (const [key, candle] of this.candles) {
       cloned.candles.set(key, candle.clone());
@@ -174,9 +132,18 @@ export class CandleGroup {
   /**
    * Create CandleGroup from DTO
    */
-  static fromJSON(dto: CandleGroupDTO, tickValue: number): CandleGroup {
+  static fromJSON(
+    dto: CandleGroupDTO,
+    tickValue: number,
+    binMultiplier: number = 1
+  ): CandleGroup {
     const exchange = dto.data[0]?.ex || '';
-    const group = new CandleGroup(dto.symbol, exchange, tickValue);
+    const group = new CandleGroup(
+      dto.symbol,
+      exchange,
+      tickValue,
+      binMultiplier
+    );
 
     for (const candleDTO of dto.data) {
       const candle = FootprintCandle.fromJSON(candleDTO);
@@ -192,9 +159,10 @@ export class CandleGroup {
   static createDefault(
     symbol: string,
     exchange: string,
-    tickValue: number
+    tickValue: number,
+    binMultiplier: number = 1
   ): CandleGroup {
-    const group = new CandleGroup(symbol, exchange, tickValue);
+    const group = new CandleGroup(symbol, exchange, tickValue, binMultiplier);
 
     // Initialize all timeframes
     for (const timeframe of Timeframe.all()) {
@@ -202,7 +170,8 @@ export class CandleGroup {
         symbol,
         timeframe,
         tickValue,
-        exchange
+        exchange,
+        binMultiplier
       );
       group.candles.set(timeframe.name, candle);
     }

@@ -289,6 +289,46 @@ export class SymbolManagementService implements SymbolManagementPort {
     }
   }
 
+  /**
+   * Update symbol configuration (bin multiplier)
+   * Updates the symbol's config and saves to repository
+   */
+  async updateSymbolConfig(
+    symbolId: string,
+    config: { binMultiplier?: number | null }
+  ): Promise<Symbol | null> {
+    try {
+      logger.info(`Updating symbol config for ${symbolId}:`, config);
+
+      // Find the symbol
+      const symbol = await this.findSymbolById(symbolId);
+      if (!symbol) {
+        logger.warn(`Symbol not found: ${symbolId}`);
+        return null;
+      }
+
+      // Update the config
+      const currentConfig = symbol.config;
+      symbol.updateConfig({
+        ...currentConfig,
+        binMultiplier: config.binMultiplier ?? null,
+      });
+      symbol.updatedAt = new Date();
+
+      // Save the symbol
+      const savedSymbol = await this.symbolRepository.save(symbol);
+
+      logger.info(`✅ Symbol config updated: ${symbolId}`, {
+        binMultiplier: config.binMultiplier,
+      });
+
+      return savedSymbol;
+    } catch (error) {
+      logger.error(`Failed to update symbol config ${symbolId}:`, error);
+      throw error;
+    }
+  }
+
   // ============================================================================
   // Scheduled Synchronization Operations
   // ============================================================================

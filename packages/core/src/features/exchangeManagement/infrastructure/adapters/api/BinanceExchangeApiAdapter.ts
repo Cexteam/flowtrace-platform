@@ -181,6 +181,47 @@ export class BinanceExchangeApiAdapter implements ExchangeApiClient {
   }
 
   /**
+   * Fetch current prices for all symbols
+   * Uses /fapi/v1/ticker/price endpoint
+   */
+  async fetchPrices(): Promise<Map<string, number>> {
+    try {
+      const baseUrl = await this.getBaseUrl();
+      logger.debug('Fetching prices from Binance');
+
+      const response = await fetch(`${baseUrl}/fapi/v1/ticker/price`);
+
+      if (!response.ok) {
+        throw new Error(
+          `Binance API error: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const data = (await response.json()) as Array<{
+        symbol: string;
+        price: string;
+        time: number;
+      }>;
+
+      const priceMap = new Map<string, number>();
+      for (const item of data) {
+        priceMap.set(item.symbol, parseFloat(item.price));
+      }
+
+      logger.info(`Fetched ${priceMap.size} prices from Binance`);
+      return priceMap;
+    } catch (error: any) {
+      logger.error('Failed to fetch prices from Binance:', error);
+      throw new ExchangeApiError(
+        'binance',
+        error.statusCode,
+        'Failed to fetch prices',
+        error
+      );
+    }
+  }
+
+  /**
    * Fetch exchange info from Binance API
    * Cached for 5 minutes to avoid rate limits
    */

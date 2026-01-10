@@ -4,24 +4,28 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-
-
-export class Aggs {
+/**
+ * FootprintOnly schema - optimized for footprint aggregation data
+ * Used for footprints/ files in hierarchical storage
+ * Magic bytes: FTFO (0x46 0x54 0x46 0x4F)
+ * Footprint aggregation at a specific price level
+ */
+export class FootprintAgg {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):Aggs {
+  __init(i:number, bb:flatbuffers.ByteBuffer):FootprintAgg {
   this.bb_pos = i;
   this.bb = bb;
   return this;
 }
 
-static getRootAsAggs(bb:flatbuffers.ByteBuffer, obj?:Aggs):Aggs {
-  return (obj || new Aggs()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+static getRootAsFootprintAgg(bb:flatbuffers.ByteBuffer, obj?:FootprintAgg):FootprintAgg {
+  return (obj || new FootprintAgg()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
 }
 
-static getSizePrefixedRootAsAggs(bb:flatbuffers.ByteBuffer, obj?:Aggs):Aggs {
+static getSizePrefixedRootAsFootprintAgg(bb:flatbuffers.ByteBuffer, obj?:FootprintAgg):FootprintAgg {
   bb.setPosition(bb.position() + flatbuffers.SIZE_PREFIX_LENGTH);
-  return (obj || new Aggs()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  return (obj || new FootprintAgg()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
 }
 
 tp():number {
@@ -54,7 +58,7 @@ sq():number {
   return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
 }
 
-static startAggs(builder:flatbuffers.Builder) {
+static startFootprintAgg(builder:flatbuffers.Builder) {
   builder.startObject(6);
 }
 
@@ -82,27 +86,19 @@ static addSq(builder:flatbuffers.Builder, sq:number) {
   builder.addFieldFloat64(5, sq, 0.0);
 }
 
-static endAggs(builder:flatbuffers.Builder):flatbuffers.Offset {
+static endFootprintAgg(builder:flatbuffers.Builder):flatbuffers.Offset {
   const offset = builder.endObject();
   return offset;
 }
 
-static finishAggsBuffer(builder:flatbuffers.Builder, offset:flatbuffers.Offset) {
-  builder.finish(offset);
-}
-
-static finishSizePrefixedAggsBuffer(builder:flatbuffers.Builder, offset:flatbuffers.Offset) {
-  builder.finish(offset, undefined, true);
-}
-
-static createAggs(builder:flatbuffers.Builder, tp:number, v:number, bv:number, sv:number, bq:number, sq:number):flatbuffers.Offset {
-  Aggs.startAggs(builder);
-  Aggs.addTp(builder, tp);
-  Aggs.addV(builder, v);
-  Aggs.addBv(builder, bv);
-  Aggs.addSv(builder, sv);
-  Aggs.addBq(builder, bq);
-  Aggs.addSq(builder, sq);
-  return Aggs.endAggs(builder);
+static createFootprintAgg(builder:flatbuffers.Builder, tp:number, v:number, bv:number, sv:number, bq:number, sq:number):flatbuffers.Offset {
+  FootprintAgg.startFootprintAgg(builder);
+  FootprintAgg.addTp(builder, tp);
+  FootprintAgg.addV(builder, v);
+  FootprintAgg.addBv(builder, bv);
+  FootprintAgg.addSv(builder, sv);
+  FootprintAgg.addBq(builder, bq);
+  FootprintAgg.addSq(builder, sq);
+  return FootprintAgg.endFootprintAgg(builder);
 }
 }

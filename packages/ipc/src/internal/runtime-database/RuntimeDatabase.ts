@@ -293,6 +293,34 @@ export class RuntimeDatabase {
   }
 
   /**
+   * Save multiple gap records in a single transaction
+   * Used by queue-based gap persistence to reduce IPC overhead
+   */
+  saveGapBatch(gaps: GapRecordInputDTO[]): void {
+    if (gaps.length === 0) return;
+
+    const stmt = this.db.prepare(`
+      INSERT OR IGNORE INTO gap_records (exchange, symbol, from_trade_id, to_trade_id, gap_size, detected_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    const transaction = this.db.transaction((items: GapRecordInputDTO[]) => {
+      for (const gap of items) {
+        stmt.run(
+          gap.exchange,
+          gap.symbol,
+          gap.fromTradeId,
+          gap.toTradeId,
+          gap.gapSize,
+          gap.detectedAt
+        );
+      }
+    });
+
+    transaction(gaps);
+  }
+
+  /**
    * Load gap records with optional filtering
    */
   loadGaps(options?: GapLoadOptionsDTO): GapRecordDTO[] {

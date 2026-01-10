@@ -10,6 +10,7 @@
  * - SyncSymbolsFromExchangeUseCase: Sync symbols from exchange
  * - ActivateSymbolUseCase: Activate a symbol
  * - DeactivateSymbolUseCase: Deactivate a symbol
+ * - ConfigSyncNotifier: Notifies workers of config changes
  * Note: Exchange-related components moved to exchangeManagement feature
  *
  */
@@ -24,17 +25,23 @@ import { SymbolRepository } from '../../../../../../features/symbolManagement/do
 // Application Ports (Inbound Ports)
 import { SymbolManagementPort } from '../../../../../../features/symbolManagement/application/ports/in/SymbolManagementPort.js';
 
+// Application Ports (Outbound Ports)
+import { ConfigSyncNotifierPort } from '../../../../../../features/symbolManagement/application/ports/out/ConfigSyncNotifierPort.js';
+
 // Infrastructure Adapters
 import { DrizzleSymbolRepository } from '../../../../../../features/symbolManagement/infrastructure/adapters/DrizzleSymbolRepository.js';
+import { ConfigSyncNotifierAdapter } from '../../../../../../features/symbolManagement/infrastructure/adapters/ConfigSyncNotifierAdapter.js';
 // Note: Exchange-related adapters moved to exchangeManagement feature
-
-// Application Services
-import { SymbolManagementService } from '../../../../../../features/symbolManagement/application/services/SymbolManagementService.js';
 
 // Use Cases
 import { SyncSymbolsFromExchangeUseCase } from '../../../../../../features/symbolManagement/application/use-cases/SyncSymbolsFromExchange/SyncSymbolsFromExchangeUseCase.js';
 import { ActivateSymbolUseCase } from '../../../../../../features/symbolManagement/application/use-cases/ActivateSymbol/ActivateSymbolUseCase.js';
 import { DeactivateSymbolUseCase } from '../../../../../../features/symbolManagement/application/use-cases/DeactivateSymbol/DeactivateSymbolUseCase.js';
+
+// Application Services
+import { SymbolManagementService } from '../../../../../../features/symbolManagement/application/services/SymbolManagementService.js';
+
+// Note: ConfigSyncNotifier moved to infrastructure/adapters/ConfigSyncNotifierAdapter
 
 /**
  * Configure SymbolManagement core bindings
@@ -81,6 +88,15 @@ export function configureSymbolManagementCore(container: Container): void {
   container
     .bind<SymbolRepository>(SYMBOL_MANAGEMENT_TYPES.SymbolRepository)
     .to(DrizzleSymbolRepository)
+    .inSingletonScope();
+
+  // Config Sync Notifier (notifies workers of config changes)
+  // ConfigSyncNotifierPort → ConfigSyncNotifierAdapter (Port Out binding)
+  container
+    .bind<ConfigSyncNotifierPort>(
+      SYMBOL_MANAGEMENT_TYPES.ConfigSyncNotifierPort
+    )
+    .to(ConfigSyncNotifierAdapter)
     .inSingletonScope();
 
   // Note: Exchange-related bindings moved to exchangeManagement feature

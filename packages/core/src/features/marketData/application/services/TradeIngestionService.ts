@@ -29,6 +29,16 @@ import { Trades } from '../../../candleProcessing/domain/value-objects/TradeData
 const logger = createLogger('TradeIngestionService');
 
 /**
+ * Cached symbol config for trade processing
+ */
+interface CachedSymbolConfig {
+  exchange: string;
+  tickValue: number;
+  binMultiplier: number | null;
+  cachedAt: number;
+}
+
+/**
  * SERVICE: Orchestrates complete trade data ingestion pipeline
  * From symbol fetching → WebSocket connection → trade routing → workers
  *
@@ -41,6 +51,9 @@ const logger = createLogger('TradeIngestionService');
 export class TradeIngestionService implements TradeIngestionPort {
   private isRunning = false;
   private connectedSymbols: string[] = [];
+
+  /** Cache symbol configs to avoid DB query on every trade batch */
+  private symbolConfigCache: Map<string, CachedSymbolConfig> = new Map();
 
   constructor(
     @inject(SYMBOL_MANAGEMENT_TYPES.SymbolRepository)
@@ -104,6 +117,16 @@ export class TradeIngestionService implements TradeIngestionPort {
       // ✅ PHASE 1: Fetch active trading symbols
       const activeSymbols = await this.fetchActiveSymbols();
       logger.info(`Fetched ${activeSymbols.length} active trading symbols`);
+
+      // ✅ PHASE 1.5: Load and cache config for all active symbols
+      // This ensures binMultiplier, tickValue are available when routing trades
+      if (activeSymbols.length > 0) {
+        logger.info('Loading symbol configs from database...');
+        await Promise.all(activeSymbols.map((s) => this.loadSymbolConfig(s)));
+        logger.info(
+          `Loaded configs for ${this.symbolConfigCache.size} symbols`
+        );
+      }
 
       // ✅ Graceful handling: No active symbols - start in standby mode
       if (activeSymbols.length === 0) {
@@ -234,6 +257,9 @@ export class TradeIngestionService implements TradeIngestionPort {
         };
       }
 
+      // Load and cache config for new symbols BEFORE adding to pipeline
+      await Promise.all(newSymbols.map((s) => this.loadSymbolConfig(s)));
+
       const request: AddSymbolsToIngestionRequest = {
         symbols: newSymbols,
         initializeFootprint: true,
@@ -304,6 +330,9 @@ export class TradeIngestionService implements TradeIngestionPort {
           }`
         );
       }
+
+      // Clear cached config for removed symbols
+      result.removedSymbols.forEach((s) => this.clearSymbolConfig(s));
 
       this.connectedSymbols = this.connectedSymbols.filter(
         (s) => !result.removedSymbols.includes(s)
@@ -412,11 +441,65 @@ export class TradeIngestionService implements TradeIngestionPort {
     trades: Trades
   ): Promise<void> {
     try {
+      // Get config from cache (loaded when symbol was activated)
+      const cachedConfig = this.symbolConfigCache.get(symbol);
+      const config = cachedConfig
+        ? {
+            exchange: cachedConfig.exchange,
+            tickValue: cachedConfig.tickValue,
+            binMultiplier: cachedConfig.binMultiplier,
+          }
+        : undefined;
+
       await this.workerManagementPort.routeTrades(symbol, trades, {
         priority: 'normal',
+        config,
       });
     } catch (error) {
       logger.error(`Failed to route trades for ${symbol}`, error);
     }
+  }
+
+  /**
+   * Load and cache symbol config from database
+   * Called when symbol is activated
+   */
+  private async loadSymbolConfig(symbol: string): Promise<void> {
+    try {
+      const exchange = 'binance';
+      const symbolEntity = await this.symbolRepository.findBySymbol(
+        symbol,
+        exchange
+      );
+      if (symbolEntity) {
+        this.symbolConfigCache.set(symbol, {
+          exchange: symbolEntity.exchange,
+          tickValue: symbolEntity.config.tickValue,
+          binMultiplier: symbolEntity.config.binMultiplier ?? null,
+          cachedAt: Date.now(),
+        });
+        logger.debug(`Cached config for ${symbol}`, {
+          tickValue: symbolEntity.config.tickValue,
+          binMultiplier: symbolEntity.config.binMultiplier,
+        });
+      }
+    } catch (error) {
+      logger.warn(`Failed to load config for ${symbol}`, error);
+    }
+  }
+
+  /**
+   * Reload config for specific symbols (called after sync updates config)
+   */
+  async reloadSymbolConfigs(symbols: string[]): Promise<void> {
+    logger.info(`Reloading config for ${symbols.length} symbols`);
+    await Promise.all(symbols.map((s) => this.loadSymbolConfig(s)));
+  }
+
+  /**
+   * Clear cached config for a symbol (called when symbol is deactivated)
+   */
+  private clearSymbolConfig(symbol: string): void {
+    this.symbolConfigCache.delete(symbol);
   }
 }

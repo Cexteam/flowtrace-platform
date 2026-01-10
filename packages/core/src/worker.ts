@@ -110,7 +110,11 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
         const data = message.data as {
           symbol: string;
           trades: RawTrade[];
-          config?: { exchange?: string; tickValue?: number };
+          config?: {
+            exchange?: string;
+            tickValue?: number;
+            binMultiplier?: number | null;
+          };
           options?: { priority?: string; batchId?: string };
         };
         const { symbol, trades, config } = data;
@@ -125,6 +129,7 @@ async function handleMessage(message: WorkerMessage): Promise<void> {
                 symbol,
                 exchange: config?.exchange || 'binance',
                 tickValue: config?.tickValue || 0.1,
+                binMultiplier: config?.binMultiplier ?? 1,
               },
             });
             completedCandles.push(...res.completedCandles);

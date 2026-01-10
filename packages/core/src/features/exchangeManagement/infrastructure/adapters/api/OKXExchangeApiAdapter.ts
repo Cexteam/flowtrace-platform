@@ -227,6 +227,58 @@ export class OKXExchangeApiAdapter implements ExchangeApiClient {
   }
 
   /**
+   * Fetch current prices for all symbols
+   * Uses /api/v5/market/tickers endpoint
+   */
+  async fetchPrices(): Promise<Map<string, number>> {
+    try {
+      const baseUrl = await this.getBaseUrl();
+      logger.debug('Fetching prices from OKX');
+
+      const response = await fetch(
+        `${baseUrl}/api/v5/market/tickers?instType=SWAP`
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `OKX API error: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const data = (await response.json()) as {
+        code: string;
+        msg: string;
+        data: Array<{
+          instId: string;
+          last: string;
+        }>;
+      };
+
+      if (data.code !== '0') {
+        throw new Error(`OKX API error: ${data.msg}`);
+      }
+
+      const priceMap = new Map<string, number>();
+      for (const item of data.data) {
+        // Convert OKX format (BTC-USDT-SWAP) to standard format (BTCUSDT)
+        const symbol = this.toStandardFormat(item.instId);
+        priceMap.set(symbol, parseFloat(item.last));
+      }
+
+      logger.info(`Fetched ${priceMap.size} prices from OKX`);
+      return priceMap;
+    } catch (error: any) {
+      logger.error('Failed to fetch prices from OKX:', error);
+      throw new ExchangeApiError(
+        'okx',
+        error.statusCode,
+        'Failed to fetch prices',
+        error
+      );
+    }
+  }
+
+  /**
    * Map OKX instrument to normalized ExchangeSymbol
    */
   private mapToExchangeSymbol(

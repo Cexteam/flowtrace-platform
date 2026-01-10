@@ -8,11 +8,11 @@
  */
 
 import * as fs from 'fs';
-import { ReadOnlyCandleStorage } from './infrastructure/adapters/ReadOnlyCandleStorage.js';
-import type { CandleReaderPort } from './application/ports/out/CandleReaderPort.js';
+import { ReadOnlyCandleStorage } from './infrastructure/adapters/storage/ReadOnlyCandleStorage.js';
+import type { CandleReaderPort } from './application/ports/in/CandleReaderPort.js';
 
 // Export ports
-export type { CandleReaderPort } from './application/ports/out/CandleReaderPort.js';
+export type { CandleReaderPort } from './application/ports/in/CandleReaderPort.js';
 export type { CandleStoragePort } from './application/ports/out/CandleStoragePort.js';
 export type {
   FileStoragePort,

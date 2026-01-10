@@ -33,6 +33,15 @@ export class RuntimeGapStorageAdapter implements GapStoragePort {
   }
 
   /**
+   * Save multiple gap records in a single transaction
+   *
+   * @param gaps - Array of gap record input data
+   */
+  async saveBatch(gaps: GapRecordInputDTO[]): Promise<void> {
+    this.runtimeDb.saveGapBatch(gaps);
+  }
+
+  /**
    * Load gap records with optional filtering
    *
    * @param options - Filter options (symbol, syncedOnly)

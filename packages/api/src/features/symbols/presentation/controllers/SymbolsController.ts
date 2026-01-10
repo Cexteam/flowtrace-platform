@@ -10,12 +10,20 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Param,
   Query,
+  Body,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiBody,
+} from '@nestjs/swagger';
 import {
   SymbolsService,
   type PaginatedSymbolsResponse,
@@ -25,6 +33,8 @@ import {
   SymbolResponseDto,
   SymbolListResponseDto,
   SymbolActivationResponseDto,
+  SymbolConfigResponseDto,
+  UpdateSymbolConfigDto,
   VALID_EXCHANGES,
   type ValidExchange,
 } from '../dto/index.js';
@@ -101,6 +111,115 @@ export class SymbolsController {
       const message = error instanceof Error ? error.message : 'Unknown error';
       throw new HttpException(
         `Failed to get symbol: ${message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Get(':symbolId/config')
+  @ApiOperation({
+    summary: 'Get symbol configuration',
+    description: 'Retrieve bin size configuration for a specific symbol',
+  })
+  @ApiParam({
+    name: 'symbolId',
+    description: 'Symbol ID',
+    example: 'binance-BTCUSDT',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Symbol configuration retrieved successfully',
+    type: SymbolConfigResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Symbol not found',
+  })
+  async getSymbolConfig(
+    @Param('symbolId') symbolId: string
+  ): Promise<SymbolConfigResponseDto> {
+    try {
+      const config = await this.symbolsService.getSymbolConfig(symbolId);
+
+      if (!config) {
+        throw new HttpException(
+          `Symbol ${symbolId} not found`,
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      return config;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new HttpException(
+        `Failed to get symbol config: ${message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Patch(':symbolId/config')
+  @ApiOperation({
+    summary: 'Update symbol configuration',
+    description:
+      'Update bin size configuration for a specific symbol. The binMultiplier must produce a "nice" effective bin size.',
+  })
+  @ApiParam({
+    name: 'symbolId',
+    description: 'Symbol ID',
+    example: 'binance-BTCUSDT',
+  })
+  @ApiBody({
+    type: UpdateSymbolConfigDto,
+    description: 'Configuration update payload',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Symbol configuration updated successfully',
+    type: SymbolConfigResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid binMultiplier - does not produce nice bin size',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Symbol not found',
+  })
+  async updateSymbolConfig(
+    @Param('symbolId') symbolId: string,
+    @Body() updateDto: UpdateSymbolConfigDto
+  ): Promise<SymbolConfigResponseDto> {
+    try {
+      const config = await this.symbolsService.updateSymbolConfig(
+        symbolId,
+        updateDto
+      );
+
+      if (!config) {
+        throw new HttpException(
+          `Symbol ${symbolId} not found`,
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      return config;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : 'Unknown error';
+
+      // Check if it's a validation error
+      if (message.includes('Invalid binMultiplier')) {
+        throw new HttpException(message, HttpStatus.BAD_REQUEST);
+      }
+
+      throw new HttpException(
+        `Failed to update symbol config: ${message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }

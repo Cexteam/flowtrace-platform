@@ -32,4 +32,7 @@ export const CANDLE_PERSISTENCE_TYPES = {
   // Serializers
   CandleOnlySerializer: Symbol.for('CandleOnlySerializer'),
   FootprintOnlySerializer: Symbol.for('FootprintOnlySerializer'),
+  CompressedCandleSerializerPort: Symbol.for(
+    'CandlePersistence.CompressedCandleSerializerPort'
+  ),
 } as const;

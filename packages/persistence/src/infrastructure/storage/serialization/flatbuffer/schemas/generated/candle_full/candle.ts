@@ -67,116 +67,114 @@ s1(optionalEncoding?:any):string|Uint8Array|null {
   return offset ? this.bb!.__string(this.bb_pos + offset, optionalEncoding) : null;
 }
 
-s2():string|null
-s2(optionalEncoding:flatbuffers.Encoding):string|Uint8Array|null
-s2(optionalEncoding?:any):string|Uint8Array|null {
+i():string|null
+i(optionalEncoding:flatbuffers.Encoding):string|Uint8Array|null
+i(optionalEncoding?:any):string|Uint8Array|null {
   const offset = this.bb!.__offset(this.bb_pos, 16);
   return offset ? this.bb!.__string(this.bb_pos + offset, optionalEncoding) : null;
 }
 
-i():string|null
-i(optionalEncoding:flatbuffers.Encoding):string|Uint8Array|null
-i(optionalEncoding?:any):string|Uint8Array|null {
-  const offset = this.bb!.__offset(this.bb_pos, 18);
-  return offset ? this.bb!.__string(this.bb_pos + offset, optionalEncoding) : null;
-}
-
 id():bigint {
-  const offset = this.bb!.__offset(this.bb_pos, 20);
+  const offset = this.bb!.__offset(this.bb_pos, 18);
   return offset ? this.bb!.readInt64(this.bb_pos + offset) : BigInt('0');
 }
 
 vi():bigint {
-  const offset = this.bb!.__offset(this.bb_pos, 22);
+  const offset = this.bb!.__offset(this.bb_pos, 20);
   return offset ? this.bb!.readInt64(this.bb_pos + offset) : BigInt('0');
 }
 
 t():bigint {
-  const offset = this.bb!.__offset(this.bb_pos, 24);
+  const offset = this.bb!.__offset(this.bb_pos, 22);
   return offset ? this.bb!.readInt64(this.bb_pos + offset) : BigInt('0');
 }
 
 ct():bigint {
-  const offset = this.bb!.__offset(this.bb_pos, 26);
+  const offset = this.bb!.__offset(this.bb_pos, 24);
   return offset ? this.bb!.readInt64(this.bb_pos + offset) : BigInt('0');
 }
 
 df():bigint {
-  const offset = this.bb!.__offset(this.bb_pos, 28);
+  const offset = this.bb!.__offset(this.bb_pos, 26);
   return offset ? this.bb!.readInt64(this.bb_pos + offset) : BigInt('0');
 }
 
 o():number {
-  const offset = this.bb!.__offset(this.bb_pos, 30);
+  const offset = this.bb!.__offset(this.bb_pos, 28);
   return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
 }
 
 h():number {
-  const offset = this.bb!.__offset(this.bb_pos, 32);
+  const offset = this.bb!.__offset(this.bb_pos, 30);
   return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
 }
 
 l():number {
-  const offset = this.bb!.__offset(this.bb_pos, 34);
+  const offset = this.bb!.__offset(this.bb_pos, 32);
   return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
 }
 
 c():number {
-  const offset = this.bb!.__offset(this.bb_pos, 36);
+  const offset = this.bb!.__offset(this.bb_pos, 34);
   return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
 }
 
 v():number {
-  const offset = this.bb!.__offset(this.bb_pos, 38);
+  const offset = this.bb!.__offset(this.bb_pos, 36);
   return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
 }
 
 bv():number {
-  const offset = this.bb!.__offset(this.bb_pos, 40);
+  const offset = this.bb!.__offset(this.bb_pos, 38);
   return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
 }
 
 sv():number {
-  const offset = this.bb!.__offset(this.bb_pos, 42);
+  const offset = this.bb!.__offset(this.bb_pos, 40);
   return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
 }
 
 q():number {
-  const offset = this.bb!.__offset(this.bb_pos, 44);
+  const offset = this.bb!.__offset(this.bb_pos, 42);
   return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
 }
 
 bq():number {
-  const offset = this.bb!.__offset(this.bb_pos, 46);
+  const offset = this.bb!.__offset(this.bb_pos, 44);
   return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
 }
 
 sq():number {
-  const offset = this.bb!.__offset(this.bb_pos, 48);
+  const offset = this.bb!.__offset(this.bb_pos, 46);
   return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
 }
 
 d():number {
-  const offset = this.bb!.__offset(this.bb_pos, 50);
+  const offset = this.bb!.__offset(this.bb_pos, 48);
   return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
 }
 
 dMax():number {
-  const offset = this.bb!.__offset(this.bb_pos, 52);
+  const offset = this.bb!.__offset(this.bb_pos, 50);
   return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
 }
 
 dMin():number {
-  const offset = this.bb!.__offset(this.bb_pos, 54);
+  const offset = this.bb!.__offset(this.bb_pos, 52);
   return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
 }
 
 n():bigint {
-  const offset = this.bb!.__offset(this.bb_pos, 56);
+  const offset = this.bb!.__offset(this.bb_pos, 54);
   return offset ? this.bb!.readInt64(this.bb_pos + offset) : BigInt('0');
 }
 
 tv():number {
+  const offset = this.bb!.__offset(this.bb_pos, 56);
+  return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
+}
+
+bm():number {
   const offset = this.bb!.__offset(this.bb_pos, 58);
   return offset ? this.bb!.readFloat64(this.bb_pos + offset) : 0.0;
 }
@@ -234,92 +232,92 @@ static addS1(builder:flatbuffers.Builder, s1Offset:flatbuffers.Offset) {
   builder.addFieldOffset(5, s1Offset, 0);
 }
 
-static addS2(builder:flatbuffers.Builder, s2Offset:flatbuffers.Offset) {
-  builder.addFieldOffset(6, s2Offset, 0);
-}
-
 static addI(builder:flatbuffers.Builder, iOffset:flatbuffers.Offset) {
-  builder.addFieldOffset(7, iOffset, 0);
+  builder.addFieldOffset(6, iOffset, 0);
 }
 
 static addId(builder:flatbuffers.Builder, id:bigint) {
-  builder.addFieldInt64(8, id, BigInt('0'));
+  builder.addFieldInt64(7, id, BigInt('0'));
 }
 
 static addVi(builder:flatbuffers.Builder, vi:bigint) {
-  builder.addFieldInt64(9, vi, BigInt('0'));
+  builder.addFieldInt64(8, vi, BigInt('0'));
 }
 
 static addT(builder:flatbuffers.Builder, t:bigint) {
-  builder.addFieldInt64(10, t, BigInt('0'));
+  builder.addFieldInt64(9, t, BigInt('0'));
 }
 
 static addCt(builder:flatbuffers.Builder, ct:bigint) {
-  builder.addFieldInt64(11, ct, BigInt('0'));
+  builder.addFieldInt64(10, ct, BigInt('0'));
 }
 
 static addDf(builder:flatbuffers.Builder, df:bigint) {
-  builder.addFieldInt64(12, df, BigInt('0'));
+  builder.addFieldInt64(11, df, BigInt('0'));
 }
 
 static addO(builder:flatbuffers.Builder, o:number) {
-  builder.addFieldFloat64(13, o, 0.0);
+  builder.addFieldFloat64(12, o, 0.0);
 }
 
 static addH(builder:flatbuffers.Builder, h:number) {
-  builder.addFieldFloat64(14, h, 0.0);
+  builder.addFieldFloat64(13, h, 0.0);
 }
 
 static addL(builder:flatbuffers.Builder, l:number) {
-  builder.addFieldFloat64(15, l, 0.0);
+  builder.addFieldFloat64(14, l, 0.0);
 }
 
 static addC(builder:flatbuffers.Builder, c:number) {
-  builder.addFieldFloat64(16, c, 0.0);
+  builder.addFieldFloat64(15, c, 0.0);
 }
 
 static addV(builder:flatbuffers.Builder, v:number) {
-  builder.addFieldFloat64(17, v, 0.0);
+  builder.addFieldFloat64(16, v, 0.0);
 }
 
 static addBv(builder:flatbuffers.Builder, bv:number) {
-  builder.addFieldFloat64(18, bv, 0.0);
+  builder.addFieldFloat64(17, bv, 0.0);
 }
 
 static addSv(builder:flatbuffers.Builder, sv:number) {
-  builder.addFieldFloat64(19, sv, 0.0);
+  builder.addFieldFloat64(18, sv, 0.0);
 }
 
 static addQ(builder:flatbuffers.Builder, q:number) {
-  builder.addFieldFloat64(20, q, 0.0);
+  builder.addFieldFloat64(19, q, 0.0);
 }
 
 static addBq(builder:flatbuffers.Builder, bq:number) {
-  builder.addFieldFloat64(21, bq, 0.0);
+  builder.addFieldFloat64(20, bq, 0.0);
 }
 
 static addSq(builder:flatbuffers.Builder, sq:number) {
-  builder.addFieldFloat64(22, sq, 0.0);
+  builder.addFieldFloat64(21, sq, 0.0);
 }
 
 static addD(builder:flatbuffers.Builder, d:number) {
-  builder.addFieldFloat64(23, d, 0.0);
+  builder.addFieldFloat64(22, d, 0.0);
 }
 
 static addDMax(builder:flatbuffers.Builder, dMax:number) {
-  builder.addFieldFloat64(24, dMax, 0.0);
+  builder.addFieldFloat64(23, dMax, 0.0);
 }
 
 static addDMin(builder:flatbuffers.Builder, dMin:number) {
-  builder.addFieldFloat64(25, dMin, 0.0);
+  builder.addFieldFloat64(24, dMin, 0.0);
 }
 
 static addN(builder:flatbuffers.Builder, n:bigint) {
-  builder.addFieldInt64(26, n, BigInt('0'));
+  builder.addFieldInt64(25, n, BigInt('0'));
 }
 
 static addTv(builder:flatbuffers.Builder, tv:number) {
-  builder.addFieldFloat64(27, tv, 0.0);
+  builder.addFieldFloat64(26, tv, 0.0);
+}
+
+static addBm(builder:flatbuffers.Builder, bm:number) {
+  builder.addFieldFloat64(27, bm, 0.0);
 }
 
 static addF(builder:flatbuffers.Builder, f:number) {
@@ -363,7 +361,7 @@ static finishSizePrefixedCandleBuffer(builder:flatbuffers.Builder, offset:flatbu
   builder.finish(offset, undefined, true);
 }
 
-static createCandle(builder:flatbuffers.Builder, eOffset:flatbuffers.Offset, tzOffset:flatbuffers.Offset, exOffset:flatbuffers.Offset, aOffset:flatbuffers.Offset, sOffset:flatbuffers.Offset, s1Offset:flatbuffers.Offset, s2Offset:flatbuffers.Offset, iOffset:flatbuffers.Offset, id:bigint, vi:bigint, t:bigint, ct:bigint, df:bigint, o:number, h:number, l:number, c:number, v:number, bv:number, sv:number, q:number, bq:number, sq:number, d:number, dMax:number, dMin:number, n:bigint, tv:number, f:number, ls:number, x:boolean, aggsOffset:flatbuffers.Offset):flatbuffers.Offset {
+static createCandle(builder:flatbuffers.Builder, eOffset:flatbuffers.Offset, tzOffset:flatbuffers.Offset, exOffset:flatbuffers.Offset, aOffset:flatbuffers.Offset, sOffset:flatbuffers.Offset, s1Offset:flatbuffers.Offset, iOffset:flatbuffers.Offset, id:bigint, vi:bigint, t:bigint, ct:bigint, df:bigint, o:number, h:number, l:number, c:number, v:number, bv:number, sv:number, q:number, bq:number, sq:number, d:number, dMax:number, dMin:number, n:bigint, tv:number, bm:number, f:number, ls:number, x:boolean, aggsOffset:flatbuffers.Offset):flatbuffers.Offset {
   Candle.startCandle(builder);
   Candle.addE(builder, eOffset);
   Candle.addTz(builder, tzOffset);
@@ -371,7 +369,6 @@ static createCandle(builder:flatbuffers.Builder, eOffset:flatbuffers.Offset, tzO
   Candle.addA(builder, aOffset);
   Candle.addS(builder, sOffset);
   Candle.addS1(builder, s1Offset);
-  Candle.addS2(builder, s2Offset);
   Candle.addI(builder, iOffset);
   Candle.addId(builder, id);
   Candle.addVi(builder, vi);
@@ -393,6 +390,7 @@ static createCandle(builder:flatbuffers.Builder, eOffset:flatbuffers.Offset, tzO
   Candle.addDMin(builder, dMin);
   Candle.addN(builder, n);
   Candle.addTv(builder, tv);
+  Candle.addBm(builder, bm);
   Candle.addF(builder, f);
   Candle.addLs(builder, ls);
   Candle.addX(builder, x);

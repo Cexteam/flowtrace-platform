@@ -2,7 +2,7 @@
  * ReadOnlyCandleStorage
  * Read-only adapter implementing CandleReaderPort interface.
  * Opens SQLite database in read-only mode for safe concurrent access.
- * Uses FlatBuffer deserialization for efficient data retrieval.
+ * Uses FlatBuffer + LZ4 deserialization for efficient data retrieval.
  *
  * @module @flowtrace/persistence
  */
@@ -11,8 +11,8 @@ import Database from 'better-sqlite3';
 import type {
   CandleReaderPort,
   FootprintCandleResult,
-} from '../../application/ports/out/CandleReaderPort.js';
-import { FlatBufferSerializer } from '../../../../infrastructure/storage/serialization/flatbuffer/FlatBufferSerializer.js';
+} from '../../../application/ports/in/CandleReaderPort.js';
+import { CompressedCandleSerializerAdapter } from '../serialization/CompressedCandleSerializerAdapter.js';
 import * as fs from 'fs';
 
 /**
@@ -37,6 +37,7 @@ export class ReadOnlyCandleStorage implements CandleReaderPort {
   private isClosed = false;
   private readonly config: Required<ReadOnlyCandleStorageConfig>;
   private readonly tableName: string;
+  private readonly serializer: CompressedCandleSerializerAdapter;
 
   constructor(config: ReadOnlyCandleStorageConfig) {
     // Extract exchange from dbPath if not provided
@@ -52,6 +53,10 @@ export class ReadOnlyCandleStorage implements CandleReaderPort {
 
     // Use exchange-based table name (e.g., binance_candles)
     this.tableName = `${this.config.exchange}_candles`;
+
+    // Initialize serializer for FTCF format (FlatBuffer + LZ4)
+    this.serializer = new CompressedCandleSerializerAdapter();
+
     this.initialize();
   }
 
@@ -133,11 +138,14 @@ export class ReadOnlyCandleStorage implements CandleReaderPort {
   }
 
   /**
-   * Deserialize FlatBuffer to FootprintCandleResult
+   * Deserialize FTCF buffer to FootprintCandleResult
+   * FTCF format: Magic bytes (FTCF) + LZ4 compressed FlatBuffer
    */
   private deserializeCandle(buffer: Buffer): FootprintCandleResult | null {
     try {
-      const candleData = FlatBufferSerializer.deserializeCandle(buffer);
+      // Use CompressedCandleSerializerAdapter for FTCF format
+      const result = this.serializer.deserialize(buffer);
+      const candleData = result.candle;
 
       // Convert to FootprintCandleResult format
       return {
@@ -165,7 +173,14 @@ export class ReadOnlyCandleStorage implements CandleReaderPort {
         f: candleData.f || 0,
         ls: candleData.ls || 0,
         x: candleData.x || false,
-        aggs: candleData.aggs || [],
+        aggs: (candleData.aggs || []).map((agg) => ({
+          tp: agg.tp,
+          v: agg.v,
+          bv: agg.bv,
+          sv: agg.sv,
+          bq: agg.bq ?? 0,
+          sq: agg.sq ?? 0,
+        })),
       };
     } catch (error) {
       // Log warning and skip corrupted record (per Requirements 3.3)

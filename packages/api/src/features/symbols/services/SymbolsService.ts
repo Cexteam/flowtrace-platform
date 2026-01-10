@@ -13,12 +13,20 @@ import type {
   Symbol,
   ExchangeMetadata,
 } from '@flowtrace/core';
+import {
+  calculateEffectiveBinSize,
+  isNiceBinSize,
+  calculateOptimalBinSize,
+} from '@flowtrace/core';
 import type {
   SymbolResponseDto,
   SymbolListResponseDto,
   SymbolActivationResponseDto,
   ValidExchange,
   ValidSymbolStatus,
+  SymbolConfigResponseDto,
+  UpdateSymbolConfigDto,
+  BinSizeValidationResponseDto,
 } from '../presentation/dto/index.js';
 import { VALID_EXCHANGES } from '../presentation/dto/index.js';
 
@@ -362,6 +370,147 @@ export class SymbolsService {
       symbolsUpdated: result.symbolsUpdated,
       symbolsDelisted: result.symbolsDelisted,
       totalSymbols: result.totalSymbols,
+    };
+  }
+
+  /**
+   * Get symbol configuration including bin size settings
+   */
+  async getSymbolConfig(
+    symbolId: string
+  ): Promise<SymbolConfigResponseDto | null> {
+    const port = this.getPort();
+    const symbol = await port.getSymbolById(symbolId);
+
+    if (!symbol) {
+      return null;
+    }
+
+    const json = symbol.toJSON();
+    const config = json.config;
+
+    // Calculate effective bin size
+    const effectiveBinSize = calculateEffectiveBinSize(
+      config.tickValue,
+      config.binMultiplier,
+      undefined // No price needed if binMultiplier is set
+    );
+
+    return {
+      symbol: json.symbol,
+      exchange: json.exchange,
+      tickValue: config.tickValue,
+      binMultiplier: config.binMultiplier ?? null,
+      effectiveBinSize,
+      pricePrecision: config.pricePrecision,
+      quantityPrecision: config.quantityPrecision,
+      minQuantity: config.minQuantity,
+      maxQuantity: config.maxQuantity,
+    };
+  }
+
+  /**
+   * Update symbol configuration (bin multiplier)
+   */
+  async updateSymbolConfig(
+    symbolId: string,
+    updateDto: UpdateSymbolConfigDto
+  ): Promise<SymbolConfigResponseDto | null> {
+    const port = this.getPort();
+    const symbol = await port.getSymbolById(symbolId);
+
+    if (!symbol) {
+      return null;
+    }
+
+    const json = symbol.toJSON();
+    const config = json.config;
+
+    // Validate bin multiplier if provided
+    if (
+      updateDto.binMultiplier !== undefined &&
+      updateDto.binMultiplier !== null
+    ) {
+      const effectiveBinSize = config.tickValue * updateDto.binMultiplier;
+
+      if (!isNiceBinSize(effectiveBinSize)) {
+        throw new Error(
+          `Invalid binMultiplier: ${updateDto.binMultiplier}. ` +
+            `Effective bin size ${effectiveBinSize} does not match NICE_BIN_SIZE pattern [1, 2, 2.5, 4, 5] × 10^n`
+        );
+      }
+    }
+
+    // Update the symbol config through the port
+    const updatedSymbol = await port.updateSymbolConfig(symbolId, {
+      binMultiplier: updateDto.binMultiplier ?? null,
+    });
+
+    if (!updatedSymbol) {
+      return null;
+    }
+
+    const updatedJson = updatedSymbol.toJSON();
+    const updatedConfig = updatedJson.config;
+
+    const newEffectiveBinSize = calculateEffectiveBinSize(
+      updatedConfig.tickValue,
+      updatedConfig.binMultiplier,
+      undefined
+    );
+
+    return {
+      symbol: updatedJson.symbol,
+      exchange: updatedJson.exchange,
+      tickValue: updatedConfig.tickValue,
+      binMultiplier: updatedConfig.binMultiplier ?? null,
+      effectiveBinSize: newEffectiveBinSize,
+      pricePrecision: updatedConfig.pricePrecision,
+      quantityPrecision: updatedConfig.quantityPrecision,
+      minQuantity: updatedConfig.minQuantity,
+      maxQuantity: updatedConfig.maxQuantity,
+    };
+  }
+
+  /**
+   * Validate a bin multiplier value
+   */
+  validateBinMultiplier(
+    tickValue: number,
+    binMultiplier: number
+  ): BinSizeValidationResponseDto {
+    const effectiveBinSize = tickValue * binMultiplier;
+    const isValid = isNiceBinSize(effectiveBinSize);
+
+    if (isValid) {
+      return {
+        isValid: true,
+        effectiveBinSize,
+      };
+    }
+
+    // Generate suggestions for valid bin multipliers
+    const suggestions: number[] = [];
+    const niceMults = [
+      1, 2, 4, 5, 10, 20, 25, 40, 50, 100, 200, 250, 400, 500, 1000,
+    ];
+
+    for (const mult of niceMults) {
+      const ebs = tickValue * mult;
+      if (
+        isNiceBinSize(ebs) &&
+        mult >= binMultiplier * 0.5 &&
+        mult <= binMultiplier * 2
+      ) {
+        suggestions.push(mult);
+      }
+    }
+
+    return {
+      isValid: false,
+      effectiveBinSize,
+      error: `Effective bin size ${effectiveBinSize} does not match NICE_BIN_SIZE pattern [1, 2, 2.5, 4, 5] × 10^n`,
+      suggestions: suggestions.slice(0, 5),
     };
   }
 }

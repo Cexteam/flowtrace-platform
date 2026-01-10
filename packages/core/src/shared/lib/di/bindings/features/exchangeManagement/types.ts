@@ -10,6 +10,7 @@ export const EXCHANGE_MANAGEMENT_TYPES = {
   ExchangeManagementPort: Symbol.for(
     'ExchangeManagement.ExchangeManagementPort'
   ),
+  ExchangeApiPort: Symbol.for('ExchangeManagement.ExchangeApiPort'),
 
   // Services
   ExchangeManagementService: Symbol.for(

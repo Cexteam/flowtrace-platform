@@ -16,8 +16,8 @@ import * as path from 'path';
 import type {
   FileStoragePort,
   FileInfo,
-} from '../../application/ports/out/FileStoragePort.js';
-import { CANDLE_PERSISTENCE_TYPES } from '../../di/types.js';
+} from '../../../application/ports/out/FileStoragePort.js';
+import { CANDLE_PERSISTENCE_TYPES } from '../../../di/types.js';
 
 export interface LocalStorageConfig {
   /** Base directory for all file storage */

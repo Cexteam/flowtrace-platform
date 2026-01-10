@@ -103,6 +103,18 @@ export interface SymbolManagementPort {
    */
   getSymbolById(symbolId: string): Promise<Symbol | null>;
 
+  /**
+   * Update symbol configuration (bin multiplier)
+   *
+   * @param symbolId - Symbol ID
+   * @param config - Configuration updates
+   * @returns Updated symbol or null if not found
+   */
+  updateSymbolConfig(
+    symbolId: string,
+    config: { binMultiplier?: number | null }
+  ): Promise<Symbol | null>;
+
   // ============================================================================
   // Scheduled Synchronization Operations
   // ============================================================================

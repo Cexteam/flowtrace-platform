@@ -210,7 +210,10 @@ export class IPCStatePersistenceAdapter implements StatePersistencePort {
       const stateResponse = response as unknown as StateResponse;
       pending.resolve(stateResponse);
     } else {
-      logger.warn('Received response for unknown request', { messageId });
+      // Late response - request already timed out and was removed
+      logger.debug('Received late response for completed request', {
+        messageId,
+      });
     }
   }
 

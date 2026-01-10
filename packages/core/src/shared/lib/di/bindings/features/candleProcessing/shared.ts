@@ -8,6 +8,7 @@
  * - ProcessTradeUseCase: Application use case for processing trades
  * - InitializeSymbolUseCase: Application use case for initializing symbols
  * - CandleProcessingService: Main application service
+ * - BinSizeCalculatorAdapter: Infrastructure adapter for bin size calculation
  *
  */
 
@@ -21,6 +22,12 @@ import { InitializeSymbolUseCase } from '../../../../../../features/candleProces
 // Application Layer - Services
 import { CandleProcessingService } from '../../../../../../features/candleProcessing/application/services/CandleProcessingService.js';
 import { CandleProcessingPort } from '../../../../../../features/candleProcessing/application/ports/in/CandleProcessingPort.js';
+
+// Application Layer - Ports Out
+import type { BinSizeCalculatorPort } from '../../../../../../features/candleProcessing/application/ports/out/BinSizeCalculatorPort.js';
+
+// Infrastructure Layer - Adapters
+import { BinSizeCalculatorAdapter } from '../../../../../../features/candleProcessing/infrastructure/adapters/BinSizeCalculatorAdapter.js';
 
 /**
  * Configure shared CandleProcessing bindings
@@ -49,5 +56,12 @@ export function configureCandleProcessingShared(container: Container): void {
   container
     .bind(CANDLE_PROCESSING_TYPES.CandleProcessingService)
     .to(CandleProcessingService)
+    .inSingletonScope();
+
+  // Port Out → Adapter bindings
+  // BinSizeCalculatorPort → BinSizeCalculatorAdapter
+  container
+    .bind<BinSizeCalculatorPort>(CANDLE_PROCESSING_TYPES.BinSizeCalculatorPort)
+    .to(BinSizeCalculatorAdapter)
     .inSingletonScope();
 }

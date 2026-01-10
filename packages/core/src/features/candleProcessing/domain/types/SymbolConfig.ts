@@ -18,6 +18,13 @@ export interface SymbolConfig {
   /** Tick value for price binning (e.g., 0.1, 0.01) */
   tickValue: number;
 
+  /**
+   * Bin multiplier for footprint aggregation.
+   * effective_bin_size = tickValue × binMultiplier
+   * null/undefined/0 = auto-calculate based on price
+   */
+  binMultiplier?: number | null;
+
   /** Last trade timestamp (for gap detection) */
   lastTradeTime?: number;
 
@@ -31,12 +38,14 @@ export interface SymbolConfig {
 export function createDefaultSymbolConfig(
   symbol: string,
   exchange: string,
-  tickValue: number = 0.1
+  tickValue: number = 0.1,
+  binMultiplier?: number | null
 ): SymbolConfig {
   return {
     symbol,
     exchange,
     tickValue,
+    binMultiplier,
     isActive: true,
   };
 }

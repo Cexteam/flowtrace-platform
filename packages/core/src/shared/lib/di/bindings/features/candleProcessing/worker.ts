@@ -30,6 +30,15 @@ import {
   type StatePersistenceServiceConfig,
 } from '../../../../../../features/candleProcessing/application/services/StatePersistenceService.js';
 
+// Application Ports (Inbound)
+import type { StatePersistenceServicePort } from '../../../../../../features/candleProcessing/application/ports/in/StatePersistenceServicePort.js';
+
+// Application Ports (Outbound)
+import type { BinSizeCalculatorPort } from '../../../../../../features/candleProcessing/application/ports/out/BinSizeCalculatorPort.js';
+
+// Infrastructure Adapters
+import { BinSizeCalculatorAdapter } from '../../../../../../features/candleProcessing/infrastructure/adapters/BinSizeCalculatorAdapter.js';
+
 // Shared Adapters (unified implementations)
 import { CandleStorage } from '../../../../../../features/candleProcessing/infrastructure/adapters/CandleStorage.js';
 import { SymbolConfigAdapter } from '../../../../../../features/candleProcessing/infrastructure/adapters/SymbolConfigAdapter.js';
@@ -61,6 +70,31 @@ import { workerData } from 'worker_threads';
 // Get socketPath from workerData (passed from main thread when spawning worker)
 const workerSocketPath = (workerData as { socketPath?: string } | undefined)
   ?.socketPath;
+
+/**
+ * IPC Configuration from environment variables with sensible defaults
+ */
+const IPC_STATE_TIMEOUT_MS = parseInt(
+  process.env.IPC_STATE_TIMEOUT_MS ?? '30000',
+  10
+);
+const IPC_GAP_TIMEOUT_MS = parseInt(
+  process.env.IPC_GAP_TIMEOUT_MS ?? '15000',
+  10
+);
+const STATE_BATCH_SIZE = parseInt(process.env.STATE_BATCH_SIZE ?? '25', 10);
+const STATE_FLUSH_INTERVAL_MS = parseInt(
+  process.env.STATE_FLUSH_INTERVAL_MS ?? '30000',
+  10
+);
+const IPC_STATE_MAX_RETRIES = parseInt(
+  process.env.IPC_STATE_MAX_RETRIES ?? '3',
+  10
+);
+const IPC_GAP_MAX_RETRIES = parseInt(
+  process.env.IPC_GAP_MAX_RETRIES ?? '2',
+  10
+);
 
 /**
  * Get socket path from workerData, env, or default
@@ -165,14 +199,15 @@ function bindStatePersistence(container: Container): void {
   const socketPath = getSocketPath();
 
   // Bind configuration for IPCStatePersistenceAdapter
+  // Uses environment variables with sensible defaults
   container
     .bind<IPCStatePersistenceConfig>('IPC_STATE_PERSISTENCE_CONFIG')
     .toConstantValue({
       socketPath,
       connectTimeout: 5000,
-      requestTimeout: 10000,
-      maxRetries: 5,
-      baseRetryDelay: 1000,
+      requestTimeout: IPC_STATE_TIMEOUT_MS, // 30s (was 10s)
+      maxRetries: IPC_STATE_MAX_RETRIES, // 3 (was 5)
+      baseRetryDelay: 2000, // 2s (was 1s)
       maxRetryDelay: 16000,
     });
 
@@ -192,14 +227,15 @@ function bindGapPersistence(container: Container): void {
   const socketPath = getSocketPath();
 
   // Bind configuration for IPCGapPersistenceAdapter
+  // Uses environment variables with sensible defaults
   container
     .bind<IPCGapPersistenceConfig>('IPC_GAP_PERSISTENCE_CONFIG')
     .toConstantValue({
       socketPath,
       connectTimeout: 5000,
-      requestTimeout: 10000,
-      maxRetries: 3, // Fewer retries for gap persistence (non-critical)
-      baseRetryDelay: 500,
+      requestTimeout: IPC_GAP_TIMEOUT_MS, // 15s (was 10s)
+      maxRetries: IPC_GAP_MAX_RETRIES, // 2 (was 3)
+      baseRetryDelay: 1000, // 1s (was 500ms)
       maxRetryDelay: 4000,
     });
 
@@ -217,12 +253,12 @@ function bindGapPersistence(container: Container): void {
  */
 function bindStatePersistenceService(container: Container): void {
   // Bind configuration for StatePersistenceService
-  // Default: 30s flush interval, 50 symbols per batch
+  // Uses environment variables with sensible defaults
   container
     .bind<StatePersistenceServiceConfig>('STATE_PERSISTENCE_SERVICE_CONFIG')
     .toConstantValue({
-      flushIntervalMs: 30_000, // 30 seconds
-      batchSize: 50,
+      flushIntervalMs: STATE_FLUSH_INTERVAL_MS, // 30s
+      batchSize: STATE_BATCH_SIZE, // 25 (was 50)
     });
 
   // Bind StatePersistenceService
@@ -231,5 +267,23 @@ function bindStatePersistenceService(container: Container): void {
       CANDLE_PROCESSING_TYPES.StatePersistenceService
     )
     .to(StatePersistenceService)
+    .inSingletonScope();
+
+  // Bind StatePersistenceServicePort → StatePersistenceService (Port In binding)
+  container
+    .bind<StatePersistenceServicePort>(
+      CANDLE_PROCESSING_TYPES.StatePersistenceServicePort
+    )
+    .toDynamicValue((context) =>
+      context.container.get<StatePersistenceService>(
+        CANDLE_PROCESSING_TYPES.StatePersistenceService
+      )
+    )
+    .inSingletonScope();
+
+  // Bind BinSizeCalculatorPort → BinSizeCalculatorAdapter (Port Out binding)
+  container
+    .bind<BinSizeCalculatorPort>(CANDLE_PROCESSING_TYPES.BinSizeCalculatorPort)
+    .to(BinSizeCalculatorAdapter)
     .inSingletonScope();
 }

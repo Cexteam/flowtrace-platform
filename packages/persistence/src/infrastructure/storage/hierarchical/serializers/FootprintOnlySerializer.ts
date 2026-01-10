@@ -5,11 +5,12 @@
  * Variable-length records due to aggs array.
  *
  * Binary format:
- * Header (32 bytes):
+ * Header (40 bytes):
  * - t: int64 (8 bytes) - Open timestamp
  * - ct: int64 (8 bytes) - Close timestamp
  * - n: int32 (4 bytes) - Number of trades
  * - tv: float64 (8 bytes) - Tick value
+ * - bm: float64 (8 bytes) - Bin multiplier
  * - aggsCount: int32 (4 bytes) - Number of aggs
  *
  * Each Agg (48 bytes):
@@ -24,7 +25,7 @@
 import type { FootprintData, FootprintAgg } from '../types.js';
 
 /** Header size in bytes */
-const HEADER_SIZE = 32;
+const HEADER_SIZE = 40;
 
 /** Size of each agg record in bytes */
 const AGG_SIZE = 48;
@@ -57,6 +58,8 @@ export class FootprintOnlySerializer {
     buffer.writeInt32LE(data.n, offset);
     offset += 4;
     buffer.writeDoubleLE(data.tv, offset);
+    offset += 8;
+    buffer.writeDoubleLE(data.bm, offset);
     offset += 8;
     buffer.writeInt32LE(data.aggs.length, offset);
     offset += 4;
@@ -102,6 +105,8 @@ export class FootprintOnlySerializer {
     offset += 4;
     const tv = buffer.readDoubleLE(offset);
     offset += 8;
+    const bm = buffer.readDoubleLE(offset);
+    offset += 8;
     const aggsCount = buffer.readInt32LE(offset);
     offset += 4;
 
@@ -139,6 +144,7 @@ export class FootprintOnlySerializer {
       i: interval,
       n,
       tv,
+      bm,
       aggs,
     };
   }
@@ -198,7 +204,7 @@ export class FootprintOnlySerializer {
       return 0;
     }
 
-    const aggsCount = buffer.readInt32LE(offset + 28); // aggsCount is at offset 28
+    const aggsCount = buffer.readInt32LE(offset + 36); // aggsCount is at offset 36 (after bm field)
     return HEADER_SIZE + aggsCount * AGG_SIZE;
   }
 }

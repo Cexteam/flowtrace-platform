@@ -56,7 +56,7 @@ export type {
   CandleReaderPort,
   FootprintCandleResult,
   CandleAggregation,
-} from './features/candlePersistence/application/ports/out/CandleReaderPort.js';
+} from './features/candlePersistence/application/ports/in/CandleReaderPort.js';
 
 // =============================================================================
 // Gap Reader - Read-Only Access (No DI Required)

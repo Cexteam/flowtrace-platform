@@ -15,6 +15,7 @@ import type {
   GapMessage,
   GapResponse,
   GapSavePayload,
+  GapSaveBatchPayload,
   GapLoadPayload,
   GapMarkSyncedPayload,
   GapRecordDTO,
@@ -35,6 +36,26 @@ export interface IPCGapPersistenceConfig {
   maxRetries?: number;
   baseRetryDelay?: number;
   maxRetryDelay?: number;
+  // Queue configuration
+  maxQueueSize?: number;
+  maxRetryQueueSize?: number;
+  batchSize?: number;
+  flushIntervalMs?: number;
+  retryIntervalMs?: number;
+  batchMaxRetries?: number;
+  batchRetryDelays?: number[];
+  flushTimeoutMs?: number;
+}
+
+/**
+ * Queue metrics for monitoring
+ */
+export interface GapQueueMetrics {
+  queueSize: number;
+  retryQueueSize: number;
+  processedCount: number;
+  droppedCount: number;
+  failedCount: number;
 }
 
 /**
@@ -67,6 +88,28 @@ export class IPCGapPersistenceAdapter implements GapPersistencePort {
   // Buffer for incoming data
   private receiveBuffer: Buffer = Buffer.alloc(0);
 
+  // Queue for pending gap records
+  private pendingGaps: GapRecordInputDTO[] = [];
+  private retryQueue: GapRecordInputDTO[] = [];
+  private readonly maxQueueSize: number;
+  private readonly maxRetryQueueSize: number;
+  private readonly batchSize: number;
+  private readonly flushIntervalMs: number;
+  private readonly retryIntervalMs: number;
+  private readonly batchMaxRetries: number;
+  private readonly batchRetryDelays: number[];
+  private readonly flushTimeoutMs: number;
+
+  // Processing state
+  private isProcessing: boolean = false;
+  private flushTimer: NodeJS.Timeout | null = null;
+  private retryTimer: NodeJS.Timeout | null = null;
+
+  // Metrics
+  private processedCount: number = 0;
+  private droppedCount: number = 0;
+  private failedCount: number = 0;
+
   constructor(
     @inject('IPC_GAP_PERSISTENCE_CONFIG')
     config: IPCGapPersistenceConfig
@@ -74,9 +117,19 @@ export class IPCGapPersistenceAdapter implements GapPersistencePort {
     this.socketPath = config.socketPath;
     this.connectTimeout = config.connectTimeout ?? 5000;
     this.requestTimeout = config.requestTimeout ?? 10000;
-    this.maxRetries = config.maxRetries ?? 3; // Fewer retries for gap persistence (non-critical)
+    this.maxRetries = config.maxRetries ?? 3;
     this.baseRetryDelay = config.baseRetryDelay ?? 500;
     this.maxRetryDelay = config.maxRetryDelay ?? 4000;
+
+    // Queue configuration
+    this.maxQueueSize = config.maxQueueSize ?? 1000;
+    this.maxRetryQueueSize = config.maxRetryQueueSize ?? 500;
+    this.batchSize = config.batchSize ?? 10;
+    this.flushIntervalMs = config.flushIntervalMs ?? 1000;
+    this.retryIntervalMs = config.retryIntervalMs ?? 5000;
+    this.batchMaxRetries = config.batchMaxRetries ?? 3;
+    this.batchRetryDelays = config.batchRetryDelays ?? [100, 200, 400];
+    this.flushTimeoutMs = config.flushTimeoutMs ?? 10000;
   }
 
   /**
@@ -209,7 +262,10 @@ export class IPCGapPersistenceAdapter implements GapPersistencePort {
       const gapResponse = response as unknown as GapResponse;
       pending.resolve(gapResponse);
     } else {
-      logger.warn('Received gap response for unknown request', { messageId });
+      // Late response - request already timed out and was removed
+      logger.debug('Received late response for completed gap request', {
+        messageId,
+      });
     }
   }
 
@@ -228,6 +284,9 @@ export class IPCGapPersistenceAdapter implements GapPersistencePort {
    * Disconnect from persistence service
    */
   async disconnect(): Promise<void> {
+    // Flush all pending gaps before disconnecting
+    await this.flushAll();
+
     this.rejectAllPending(new Error('Disconnecting'));
 
     if (this.socket) {
@@ -299,7 +358,11 @@ export class IPCGapPersistenceAdapter implements GapPersistencePort {
    * Create a gap message
    */
   private createMessage(
-    payload: GapSavePayload | GapLoadPayload | GapMarkSyncedPayload
+    payload:
+      | GapSavePayload
+      | GapSaveBatchPayload
+      | GapLoadPayload
+      | GapMarkSyncedPayload
   ): GapMessage {
     return {
       id: randomUUID(),
@@ -310,19 +373,279 @@ export class IPCGapPersistenceAdapter implements GapPersistencePort {
   }
 
   /**
-   * Save a gap record
+   * Save a gap record (non-blocking, adds to queue)
+   * Returns immediately without waiting for IPC response
    */
   async saveGap(gap: GapRecordInputDTO): Promise<void> {
+    // Check queue capacity - drop oldest if full
+    if (this.pendingGaps.length >= this.maxQueueSize) {
+      this.droppedCount++;
+      this.pendingGaps.shift(); // Drop oldest
+      logger.warn('Gap queue full, dropping oldest record', {
+        queueSize: this.pendingGaps.length,
+        droppedCount: this.droppedCount,
+        symbol: gap.symbol,
+      });
+    }
+
+    // Add to queue
+    this.pendingGaps.push(gap);
+
+    // Log if queue is getting large (every 100 records after 100)
+    if (this.pendingGaps.length > 100 && this.pendingGaps.length % 100 === 0) {
+      logger.warn('Gap queue size warning', {
+        queueSize: this.pendingGaps.length,
+      });
+    }
+
+    // Trigger processing (non-blocking)
+    this.scheduleFlush();
+  }
+
+  /**
+   * Schedule flush if not already scheduled
+   */
+  private scheduleFlush(): void {
+    if (this.flushTimer) return;
+
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      this.processQueue().catch((err) => {
+        logger.error('Gap queue processing failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }, this.flushIntervalMs);
+  }
+
+  /**
+   * Process queue in batches
+   */
+  private async processQueue(): Promise<void> {
+    if (this.isProcessing || this.pendingGaps.length === 0) return;
+
+    this.isProcessing = true;
+
+    try {
+      while (this.pendingGaps.length > 0) {
+        // Take a batch
+        const batch = this.pendingGaps.splice(0, this.batchSize);
+
+        const success = await this.saveGapBatchWithRetry(batch);
+        if (success) {
+          this.processedCount += batch.length;
+        } else {
+          // Move failed batch to retry queue
+          this.moveToRetryQueue(batch);
+        }
+      }
+
+      logger.debug('Gap queue flush completed', {
+        processedCount: this.processedCount,
+        retryQueueSize: this.retryQueue.length,
+      });
+    } finally {
+      this.isProcessing = false;
+
+      // Schedule another flush if more items arrived during processing
+      if (this.pendingGaps.length > 0) {
+        this.scheduleFlush();
+      }
+    }
+  }
+
+  /**
+   * Save batch of gaps with retry logic
+   * Returns true if successful, false if all retries failed
+   */
+  private async saveGapBatchWithRetry(
+    gaps: GapRecordInputDTO[]
+  ): Promise<boolean> {
+    for (let attempt = 0; attempt <= this.batchMaxRetries; attempt++) {
+      try {
+        await this.sendGapBatch(gaps);
+        return true;
+      } catch (error) {
+        if (attempt < this.batchMaxRetries) {
+          const delay = this.batchRetryDelays[attempt] ?? 400;
+          logger.warn('Gap batch save failed, retrying', {
+            attempt: attempt + 1,
+            maxRetries: this.batchMaxRetries,
+            delayMs: delay,
+            batchSize: gaps.length,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          await this.sleep(delay);
+        } else {
+          logger.error(
+            'Gap batch save failed after all retries, moving to retry queue',
+            {
+              batchSize: gaps.length,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
+          return false;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Send batch of gaps via IPC
+   */
+  private async sendGapBatch(gaps: GapRecordInputDTO[]): Promise<void> {
     const message = this.createMessage({
-      action: 'gap_save',
-      gap,
+      action: 'gap_save_batch',
+      gaps,
     });
 
     const response = await this.sendRequestWithRetry(message);
 
     if (!response.success) {
-      throw new Error(`Failed to save gap record: ${response.error}`);
+      throw new Error(`Failed to save gap batch: ${response.error}`);
     }
+  }
+
+  /**
+   * Move failed batch to retry queue
+   */
+  private moveToRetryQueue(gaps: GapRecordInputDTO[]): void {
+    // Check retry queue capacity
+    while (this.retryQueue.length + gaps.length > this.maxRetryQueueSize) {
+      const dropped = this.retryQueue.shift();
+      if (dropped) {
+        this.droppedCount++;
+        logger.error('Retry queue overflow, dropping gap record', {
+          symbol: dropped.symbol,
+          retryQueueSize: this.retryQueue.length,
+        });
+      }
+    }
+
+    this.retryQueue.push(...gaps);
+    this.failedCount += gaps.length;
+    this.scheduleRetryQueueProcessing();
+  }
+
+  /**
+   * Schedule retry queue processing if not already scheduled
+   */
+  private scheduleRetryQueueProcessing(): void {
+    if (this.retryTimer) return;
+
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.processRetryQueue().catch((err) => {
+        logger.error('Retry queue processing failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }, this.retryIntervalMs);
+  }
+
+  /**
+   * Process retry queue
+   */
+  private async processRetryQueue(): Promise<void> {
+    if (this.retryQueue.length === 0) return;
+
+    logger.info('Processing retry queue', {
+      retryQueueSize: this.retryQueue.length,
+    });
+
+    while (this.retryQueue.length > 0) {
+      const batch = this.retryQueue.splice(0, this.batchSize);
+
+      const success = await this.saveGapBatchWithRetry(batch);
+      if (success) {
+        this.processedCount += batch.length;
+        this.failedCount -= batch.length; // Recovered from failed
+        logger.info('Retry batch succeeded', {
+          batchSize: batch.length,
+          remainingRetry: this.retryQueue.length,
+        });
+      } else {
+        // Put back at end of retry queue for next cycle
+        this.retryQueue.push(...batch);
+        break; // Stop processing this cycle, try again later
+      }
+    }
+
+    // Schedule next retry cycle if still have items
+    if (this.retryQueue.length > 0) {
+      this.scheduleRetryQueueProcessing();
+    }
+  }
+
+  /**
+   * Flush all pending gaps (for graceful shutdown)
+   */
+  async flushAll(timeoutMs?: number): Promise<void> {
+    const timeout = timeoutMs ?? this.flushTimeoutMs;
+    const startTime = Date.now();
+
+    // Cancel scheduled timers
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+
+    // Wait for current processing to complete (with timeout)
+    while (this.isProcessing && Date.now() - startTime < timeout) {
+      await this.sleep(50);
+    }
+
+    // Process remaining gaps in main queue
+    while (this.pendingGaps.length > 0 && Date.now() - startTime < timeout) {
+      const batch = this.pendingGaps.splice(0, this.batchSize);
+      const success = await this.saveGapBatchWithRetry(batch);
+      if (success) {
+        this.processedCount += batch.length;
+      }
+    }
+
+    // Process retry queue
+    while (this.retryQueue.length > 0 && Date.now() - startTime < timeout) {
+      const batch = this.retryQueue.splice(0, this.batchSize);
+      const success = await this.saveGapBatchWithRetry(batch);
+      if (success) {
+        this.processedCount += batch.length;
+        this.failedCount -= batch.length;
+      }
+    }
+
+    const remainingCount = this.pendingGaps.length + this.retryQueue.length;
+    if (remainingCount > 0) {
+      logger.warn('Gap flush timeout, remaining gaps will be lost', {
+        remainingPending: this.pendingGaps.length,
+        remainingRetry: this.retryQueue.length,
+      });
+    }
+
+    logger.info('Gap queue flushed', {
+      processedCount: this.processedCount,
+      droppedCount: this.droppedCount,
+      failedCount: this.failedCount,
+      remainingCount,
+    });
+  }
+
+  /**
+   * Get queue metrics for monitoring
+   */
+  getMetrics(): GapQueueMetrics {
+    return {
+      queueSize: this.pendingGaps.length,
+      retryQueueSize: this.retryQueue.length,
+      processedCount: this.processedCount,
+      droppedCount: this.droppedCount,
+      failedCount: this.failedCount,
+    };
   }
 
   /**

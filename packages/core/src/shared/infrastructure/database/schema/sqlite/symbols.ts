@@ -31,6 +31,9 @@ export const symbols = sqliteTable(
     pricePrecision: integer('price_precision').notNull(),
     quantityPrecision: integer('quantity_precision').notNull(),
 
+    // Bin multiplier for footprint aggregation (null = auto-calculate)
+    binMultiplier: integer('bin_multiplier'),
+
     // Status
     status: text('status').notNull().default('pending_review'),
     isStreaming: integer('is_streaming', { mode: 'boolean' })

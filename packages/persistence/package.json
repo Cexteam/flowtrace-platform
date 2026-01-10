@@ -27,6 +27,7 @@
     "better-sqlite3": "^11.6.0",
     "flatbuffers": "^24.3.25",
     "inversify": "^6.0.2",
+    "lz4-napi": "^2.9.0",
     "reflect-metadata": "^0.2.2",
     "zod": "^3.23.8"
   },

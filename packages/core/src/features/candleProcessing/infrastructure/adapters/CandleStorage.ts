@@ -15,11 +15,21 @@ import { SymbolConfig } from '../../domain/types/index.js';
 import { createLogger } from '../../../../shared/lib/logger/logger.js';
 
 /**
+ * Pending config update - applied when 1d candle completes
+ */
+interface PendingConfig {
+  tickValue: number;
+  binMultiplier: number;
+  updatedAt: number;
+}
+
+/**
  * Internal storage entry with dirty tracking
  */
 interface CandleStorageEntry {
   group: CandleGroup;
   dirty: boolean;
+  pendingConfig?: PendingConfig;
 }
 
 /**
@@ -52,9 +62,15 @@ export class CandleStorage implements CandleStoragePort {
   /**
    * Save a candle group for a symbol
    * Automatically marks the symbol as dirty
+   * Preserves pending config if exists
    */
   async saveCandleGroup(symbol: string, group: CandleGroup): Promise<void> {
-    this.entries.set(symbol, { group, dirty: true });
+    const existingEntry = this.entries.get(symbol);
+    this.entries.set(symbol, {
+      group,
+      dirty: true,
+      pendingConfig: existingEntry?.pendingConfig,
+    });
   }
 
   /**
@@ -68,7 +84,8 @@ export class CandleStorage implements CandleStoragePort {
     const group = CandleGroup.createDefault(
       symbol,
       config.exchange,
-      config.tickValue
+      config.tickValue,
+      config.binMultiplier ?? 1
     );
 
     this.entries.set(symbol, { group, dirty: true });
@@ -77,6 +94,8 @@ export class CandleStorage implements CandleStoragePort {
       symbol,
       exchange: config.exchange,
       tickValue: config.tickValue,
+      binMultiplier: config.binMultiplier ?? 1,
+      effectiveBinSize: group.effectiveBinSize,
       timeframes: group.size,
       instanceId: this.instanceId,
     });
@@ -193,5 +212,105 @@ export class CandleStorage implements CandleStoragePort {
     const count = this.entries.size;
     this.entries.clear();
     this.logger.info('Cleared all candle groups', { count });
+  }
+
+  // ============ Pending Config Methods ============
+
+  /**
+   * Set pending config for a symbol
+   * Config will be applied when 1d candle completes
+   */
+  setPendingConfig(
+    symbol: string,
+    config: { tickValue: number; binMultiplier: number }
+  ): void {
+    const entry = this.entries.get(symbol);
+    if (entry) {
+      entry.pendingConfig = {
+        tickValue: config.tickValue,
+        binMultiplier: config.binMultiplier,
+        updatedAt: Date.now(),
+      };
+      this.logger.info('Set pending config for symbol', {
+        symbol,
+        tickValue: config.tickValue,
+        binMultiplier: config.binMultiplier,
+        instanceId: this.instanceId,
+      });
+    }
+  }
+
+  /**
+   * Check if symbol has pending config
+   */
+  hasPendingConfig(symbol: string): boolean {
+    const entry = this.entries.get(symbol);
+    return !!entry?.pendingConfig;
+  }
+
+  /**
+   * Get pending config for a symbol
+   */
+  getPendingConfig(
+    symbol: string
+  ): { tickValue: number; binMultiplier: number } | null {
+    const entry = this.entries.get(symbol);
+    if (entry?.pendingConfig) {
+      return {
+        tickValue: entry.pendingConfig.tickValue,
+        binMultiplier: entry.pendingConfig.binMultiplier,
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Apply pending config and recreate CandleGroup
+   * Called when 1d candle completes
+   * Returns true if config was applied
+   */
+  applyPendingConfig(symbol: string): boolean {
+    const entry = this.entries.get(symbol);
+    if (!entry?.pendingConfig) {
+      return false;
+    }
+
+    const { tickValue, binMultiplier } = entry.pendingConfig;
+    const oldGroup = entry.group;
+
+    // Check if config actually changed
+    if (
+      oldGroup.tickValue === tickValue &&
+      oldGroup.binMultiplier === binMultiplier
+    ) {
+      // Config unchanged, just clear pending
+      entry.pendingConfig = undefined;
+      return false;
+    }
+
+    // Create new CandleGroup with new config
+    const newGroup = CandleGroup.createDefault(
+      oldGroup.symbol,
+      oldGroup.exchange,
+      tickValue,
+      binMultiplier
+    );
+
+    // Update entry
+    entry.group = newGroup;
+    entry.dirty = true;
+    entry.pendingConfig = undefined;
+
+    this.logger.info('Applied pending config - recreated CandleGroup', {
+      symbol,
+      oldTickValue: oldGroup.tickValue,
+      oldBinMultiplier: oldGroup.binMultiplier,
+      newTickValue: tickValue,
+      newBinMultiplier: binMultiplier,
+      newEffectiveBinSize: newGroup.effectiveBinSize,
+      instanceId: this.instanceId,
+    });
+
+    return true;
   }
 }

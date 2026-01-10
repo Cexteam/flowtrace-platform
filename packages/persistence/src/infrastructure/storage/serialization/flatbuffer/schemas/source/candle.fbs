@@ -15,9 +15,8 @@ table Candle {
   tz: string;      // timezone
   ex: string;      // exchange
   a: string;       // asset
-  s: string;       // symbol
-  s1: string;      // symbol alternate
-  s2: string;      // symbol alternate 2
+  s: string;       // symbol - primary trading symbol/contract (e.g., "BTCUSDT", "VN30F2501", "HPG")
+  s1: string;      // symbol1 - underlying/root symbol for linking related instruments (e.g., "BTC", "VN30")
   i: string;       // interval
   
   // Time fields
@@ -51,6 +50,7 @@ table Candle {
   // Other fields
   n: int64;        // trade count
   tv: double;      // tick value
+  bm: double;      // bin multiplier
   f: double;       // first trade id
   ls: double;      // last price
   x: bool;         // is closed

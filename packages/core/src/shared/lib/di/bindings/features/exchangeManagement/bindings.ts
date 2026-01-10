@@ -37,6 +37,7 @@ import { OKXExchangeApiAdapter } from '../../../../../../features/exchangeManage
 
 // Outbound Ports
 import { ExchangeApiClient } from '../../../../../../features/exchangeManagement/application/ports/out/ExchangeApiClient.js';
+import type { ExchangeApiPort } from '../../../../../../features/exchangeManagement/application/ports/out/ExchangeApiPort.js';
 
 // Domain Interfaces (Outbound Ports)
 import { ExchangeRepository } from '../../../../../../features/exchangeManagement/domain/repositories/ExchangeRepository.js';
@@ -110,6 +111,12 @@ export function configureExchangeManagement(container: Container): void {
   // ========================================
   // API CLIENTS
   // ========================================
+
+  // ExchangeApiPort → ExchangeApiClientFactory (Port Out binding)
+  container
+    .bind<ExchangeApiPort>(EXCHANGE_MANAGEMENT_TYPES.ExchangeApiPort)
+    .to(ExchangeApiClientFactory)
+    .inSingletonScope();
 
   container
     .bind<ExchangeApiClientFactory>(

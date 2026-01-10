@@ -10,9 +10,9 @@
  */
 
 import * as flatbuffers from 'flatbuffers';
-import { Candle } from './schemas/generated/candle/candle.js';
-import { Aggs } from './schemas/generated/candle/aggs.js';
-import { CandleBatch } from './schemas/generated/candle/candle-batch.js';
+import { Candle } from './schemas/generated/candle_full/candle.js';
+import { Aggs } from './schemas/generated/candle_full/aggs.js';
+import { CandleBatch } from './schemas/generated/candle_full/candle-batch.js';
 
 /**
  * FootprintCandle interface (from @flowtrace/core)
@@ -24,9 +24,8 @@ export interface FootprintCandleData {
   tz?: string;
   ex?: string;
   a?: string;
-  s?: string;
-  s1?: string;
-  s2?: string;
+  s?: string; // Primary trading symbol/contract (e.g., "BTCUSDT", "VN30F2501", "HPG")
+  s1?: string; // Underlying/root symbol for linking related instruments (e.g., "BTC", "VN30")
   i?: string;
 
   // Time fields
@@ -60,6 +59,7 @@ export interface FootprintCandleData {
   // Other fields
   n?: number;
   tv?: number;
+  bm?: number;
   f?: number;
   ls?: number;
   x?: boolean;
@@ -134,7 +134,6 @@ export class FlatBufferSerializer {
     const aOffset = candle.a ? builder.createString(candle.a) : 0;
     const sOffset = candle.s ? builder.createString(candle.s) : 0;
     const s1Offset = candle.s1 ? builder.createString(candle.s1) : 0;
-    const s2Offset = candle.s2 ? builder.createString(candle.s2) : 0;
     const iOffset = candle.i ? builder.createString(candle.i) : 0;
 
     // Build candle using static builder methods
@@ -147,7 +146,6 @@ export class FlatBufferSerializer {
     if (aOffset) Candle.addA(builder, aOffset);
     if (sOffset) Candle.addS(builder, sOffset);
     if (s1Offset) Candle.addS1(builder, s1Offset);
-    if (s2Offset) Candle.addS2(builder, s2Offset);
     if (iOffset) Candle.addI(builder, iOffset);
 
     // Add time fields (int64)
@@ -181,6 +179,7 @@ export class FlatBufferSerializer {
     // Add other fields
     Candle.addN(builder, BigInt(candle.n || 0));
     Candle.addTv(builder, candle.tv || 0);
+    Candle.addBm(builder, candle.bm || 1);
     Candle.addF(builder, candle.f || 0);
     Candle.addLs(builder, candle.ls || 0);
     Candle.addX(builder, candle.x || false);
@@ -242,7 +241,6 @@ export class FlatBufferSerializer {
       a: fb.a() || undefined,
       s: fb.s() || undefined,
       s1: fb.s1() || undefined,
-      s2: fb.s2() || undefined,
       i: fb.i() || undefined,
       id: Number(fb.id()),
       vi: Number(fb.vi()),
@@ -264,6 +262,7 @@ export class FlatBufferSerializer {
       dMin: fb.dMin(),
       n: Number(fb.n()),
       tv: fb.tv(),
+      bm: fb.bm() || 1,
       f: fb.f(),
       ls: fb.ls(),
       x: fb.x(),
@@ -338,7 +337,6 @@ export class FlatBufferSerializer {
     const aOffset = candle.a ? builder.createString(candle.a) : 0;
     const sOffset = candle.s ? builder.createString(candle.s) : 0;
     const s1Offset = candle.s1 ? builder.createString(candle.s1) : 0;
-    const s2Offset = candle.s2 ? builder.createString(candle.s2) : 0;
     const iOffset = candle.i ? builder.createString(candle.i) : 0;
 
     // Build candle
@@ -349,7 +347,6 @@ export class FlatBufferSerializer {
     if (aOffset) Candle.addA(builder, aOffset);
     if (sOffset) Candle.addS(builder, sOffset);
     if (s1Offset) Candle.addS1(builder, s1Offset);
-    if (s2Offset) Candle.addS2(builder, s2Offset);
     if (iOffset) Candle.addI(builder, iOffset);
 
     Candle.addId(builder, BigInt(candle.id || 0));
@@ -377,6 +374,7 @@ export class FlatBufferSerializer {
 
     Candle.addN(builder, BigInt(candle.n || 0));
     Candle.addTv(builder, candle.tv || 0);
+    Candle.addBm(builder, candle.bm || 1);
     Candle.addF(builder, candle.f || 0);
     Candle.addLs(builder, candle.ls || 0);
     Candle.addX(builder, candle.x || false);
@@ -442,7 +440,6 @@ export class FlatBufferSerializer {
       a: fb.a() || undefined,
       s: fb.s() || undefined,
       s1: fb.s1() || undefined,
-      s2: fb.s2() || undefined,
       i: fb.i() || undefined,
       id: Number(fb.id()),
       vi: Number(fb.vi()),
@@ -464,40 +461,11 @@ export class FlatBufferSerializer {
       dMin: fb.dMin(),
       n: Number(fb.n()),
       tv: fb.tv(),
+      bm: fb.bm() || 1,
       f: fb.f(),
       ls: fb.ls(),
       x: fb.x(),
       aggs: aggs.length > 0 ? aggs : undefined,
     };
-  }
-
-  /**
-   * Serialize trade to FlatBuffer format
-   *
-   * Note: Trade schema uses FBTrade namespace (different from candle)
-   *
-   * @param trade - Trade data to serialize
-   * @returns Buffer containing FlatBuffer payload
-   */
-  static serializeTrade(trade: TradeData): Buffer {
-    // TODO: Implement trade serialization when trade.fbs is compiled
-    // For now, use JSON fallback
-    const jsonStr = JSON.stringify(trade);
-    return Buffer.from(jsonStr, 'utf-8');
-  }
-
-  /**
-   * Deserialize FlatBuffer to trade
-   *
-   * Note: Trade schema uses FBTrade namespace (different from candle)
-   *
-   * @param buffer - FlatBuffer payload
-   * @returns Trade data object
-   */
-  static deserializeTrade(buffer: Buffer): TradeData {
-    // TODO: Implement trade deserialization when trade.fbs is compiled
-    // For now, use JSON fallback
-    const jsonStr = buffer.toString('utf-8');
-    return JSON.parse(jsonStr) as TradeData;
   }
 }

@@ -13,25 +13,28 @@
  * - Separate candle/footprint storage
  * - Index-based duplicate detection
  * - Period file headers for quick metadata access
+ * - FlatBuffer + LZ4 compression for storage efficiency
  */
 
-import { injectable, inject } from 'inversify';
+import { injectable, inject, optional } from 'inversify';
 import type { FootprintCandle } from '@flowtrace/core';
-import type { CandleStoragePort } from '../../application/ports/out/CandleStoragePort.js';
-import type { FileStoragePort } from '../../application/ports/out/FileStoragePort.js';
-import { CANDLE_PERSISTENCE_TYPES } from '../../di/types.js';
+import type { CandleStoragePort } from '../../../application/ports/out/CandleStoragePort.js';
+import type { FileStoragePort } from '../../../application/ports/out/FileStoragePort.js';
+import type { CompressedCandleSerializerPort } from '../../../application/ports/out/CompressedCandleSerializerPort.js';
+import type { CandleOnlyData } from '../../../../../infrastructure/storage/serialization/flatbuffer/FlatBufferCandleOnlySerializer.js';
+import type { FootprintOnlyData } from '../../../../../infrastructure/storage/serialization/flatbuffer/FlatBufferFootprintOnlySerializer.js';
+import { CANDLE_PERSISTENCE_TYPES } from '../../../di/types.js';
 import {
   type CandleData,
   type FootprintData,
-  type PeriodFileHeader,
   type HierarchicalStorageConfig,
   PERIOD_FILE_HEADER_SIZE,
   PERIOD_FILE_MAGIC,
   PERIOD_FILE_VERSION,
-} from '../../../../infrastructure/storage/hierarchical/types.js';
-import { TimeframePartitionStrategy } from '../../../../infrastructure/storage/hierarchical/services/TimeframePartitionStrategy.js';
-import { IndexManager } from '../../../../infrastructure/storage/hierarchical/services/IndexManager.js';
-import { MetadataManager } from '../../../../infrastructure/storage/hierarchical/services/MetadataManager.js';
+} from '../../../../../infrastructure/storage/hierarchical/types.js';
+import { TimeframePartitionStrategy } from '../../../../../infrastructure/storage/hierarchical/services/TimeframePartitionStrategy.js';
+import { IndexManager } from '../../../../../infrastructure/storage/hierarchical/services/IndexManager.js';
+import { MetadataManager } from '../../../../../infrastructure/storage/hierarchical/services/MetadataManager.js';
 
 /**
  * HierarchicalFileStorage
@@ -52,7 +55,10 @@ export class HierarchicalFileStorage implements CandleStoragePort {
     @inject(CANDLE_PERSISTENCE_TYPES.FileStoragePort)
     private readonly fileStorage: FileStoragePort,
     @inject(CANDLE_PERSISTENCE_TYPES.HierarchicalStorageConfig)
-    private readonly config: HierarchicalStorageConfig
+    private readonly config: HierarchicalStorageConfig,
+    @inject(CANDLE_PERSISTENCE_TYPES.CompressedCandleSerializerPort)
+    @optional()
+    private readonly serializer?: CompressedCandleSerializerPort
   ) {
     this.partitionStrategy = new TimeframePartitionStrategy();
     this.indexManager = new IndexManager(fileStorage);
@@ -425,6 +431,9 @@ export class HierarchicalFileStorage implements CandleStoragePort {
 
   /**
    * Append data to period file (O(1) operation)
+   * Uses length-prefixed records with optimized formats:
+   * - FTCO for candle data (OHLCV without footprint)
+   * - FTFO for footprint data (aggregations without OHLCV)
    */
   private async appendToFile(
     basePath: string,
@@ -434,9 +443,33 @@ export class HierarchicalFileStorage implements CandleStoragePort {
   ): Promise<void> {
     const filePath = `${basePath}/${periodName}.bin`;
 
-    // Serialize data to JSON (simple format for now)
-    // TODO: Replace with FlatBuffer serialization in Task 9
-    const serialized = Buffer.from(JSON.stringify(data) + '\n', 'utf-8');
+    // Serialize data using optimized formats if serializer available
+    let serialized: Buffer;
+    if (this.serializer) {
+      if (schema === 'candle') {
+        // Use FTCO format for candle data (optimized, no footprint fields)
+        const candleOnlyData = this.toCandleOnlyData(data as CandleData);
+        const result = this.serializer.serializeCandleOnly(candleOnlyData);
+        // Length-prefixed record: [4 bytes length][FTCO data]
+        const lengthBuffer = Buffer.alloc(4);
+        lengthBuffer.writeUInt32LE(result.buffer.length, 0);
+        serialized = Buffer.concat([lengthBuffer, result.buffer]);
+      } else {
+        // Use FTFO format for footprint data (optimized, no OHLCV fields)
+        const footprintOnlyData = this.toFootprintOnlyData(
+          data as FootprintData
+        );
+        const result =
+          this.serializer.serializeFootprintOnly(footprintOnlyData);
+        // Length-prefixed record: [4 bytes length][FTFO data]
+        const lengthBuffer = Buffer.alloc(4);
+        lengthBuffer.writeUInt32LE(result.buffer.length, 0);
+        serialized = Buffer.concat([lengthBuffer, result.buffer]);
+      }
+    } else {
+      // Fallback to JSON (legacy format)
+      serialized = Buffer.from(JSON.stringify(data) + '\n', 'utf-8');
+    }
 
     // Check if file exists
     const exists = await this.fileStorage.exists(filePath);
@@ -453,6 +486,132 @@ export class HierarchicalFileStorage implements CandleStoragePort {
 
     // Update header with new count and timestamp
     await this.updateFileHeader(filePath, data);
+  }
+
+  /**
+   * Convert CandleData to CandleOnlyData for FTCO serialization
+   */
+  private toCandleOnlyData(data: CandleData): CandleOnlyData {
+    return {
+      t: data.t,
+      ct: data.ct,
+      s: data.s,
+      i: data.i,
+      o: data.o,
+      h: data.h,
+      l: data.l,
+      c: data.c,
+      v: data.v,
+      bv: data.bv,
+      sv: data.sv,
+      q: data.q,
+      bq: data.bq,
+      sq: data.sq,
+      d: data.d,
+      dMax: data.dMax,
+      dMin: data.dMin,
+      n: data.n,
+    };
+  }
+
+  /**
+   * Convert FootprintData to FootprintOnlyData for FTFO serialization
+   */
+  private toFootprintOnlyData(data: FootprintData): FootprintOnlyData {
+    return {
+      t: data.t,
+      ct: data.ct,
+      s: data.s,
+      i: data.i,
+      n: data.n,
+      tv: data.tv,
+      bm: data.bm,
+      aggs: data.aggs.map((agg) => ({
+        tp: agg.tp,
+        v: agg.v,
+        bv: agg.bv,
+        sv: agg.sv,
+        bq: agg.bq,
+        sq: agg.sq,
+      })),
+    };
+  }
+
+  /**
+   * Convert CandleData or FootprintData to FootprintCandle for serialization
+   * @deprecated Use toCandleOnlyData or toFootprintOnlyData instead
+   */
+  private dataToFootprintCandle(
+    data: CandleData | FootprintData,
+    schema: 'candle' | 'footprint'
+  ): FootprintCandle {
+    if (schema === 'candle') {
+      const candleData = data as CandleData;
+      return {
+        e: 'CANDLESTICK',
+        tz: 'UTC',
+        ex: '',
+        a: '',
+        s: candleData.s,
+        i: candleData.i,
+        vi: this.getIntervalSeconds(candleData.i),
+        t: candleData.t,
+        ct: candleData.ct,
+        o: candleData.o,
+        h: candleData.h,
+        l: candleData.l,
+        c: candleData.c,
+        v: candleData.v,
+        bv: candleData.bv,
+        sv: candleData.sv,
+        q: candleData.q,
+        bq: candleData.bq,
+        sq: candleData.sq,
+        n: candleData.n,
+        f: 0,
+        ls: 0,
+        d: candleData.d,
+        dMax: candleData.dMax,
+        dMin: candleData.dMin,
+        tv: 0,
+        bm: 1,
+        aggs: [],
+        x: true,
+      } as unknown as FootprintCandle;
+    } else {
+      const footprintData = data as FootprintData;
+      return {
+        e: 'CANDLESTICK',
+        tz: 'UTC',
+        ex: '',
+        a: '',
+        s: footprintData.s,
+        i: footprintData.i,
+        vi: this.getIntervalSeconds(footprintData.i),
+        t: footprintData.t,
+        ct: footprintData.ct,
+        o: 0,
+        h: 0,
+        l: 0,
+        c: 0,
+        v: 0,
+        bv: 0,
+        sv: 0,
+        q: 0,
+        bq: 0,
+        sq: 0,
+        n: footprintData.n,
+        f: 0,
+        ls: 0,
+        d: 0,
+        dMax: 0,
+        dMin: 0,
+        tv: footprintData.tv,
+        bm: footprintData.bm,
+        aggs: footprintData.aggs,
+        x: true,
+      } as unknown as FootprintCandle;
+    }
   }
 
   /**
@@ -546,6 +705,7 @@ export class HierarchicalFileStorage implements CandleStoragePort {
 
   /**
    * Read candles from a period file
+   * Supports FTCO (optimized), FTCF (legacy), and JSON formats
    */
   private async readCandlesFromPeriod(
     basePath: string,
@@ -558,20 +718,67 @@ export class HierarchicalFileStorage implements CandleStoragePort {
       return [];
     }
 
-    // Skip header and parse JSON lines
-    const content = buffer.subarray(PERIOD_FILE_HEADER_SIZE).toString('utf-8');
-    const lines = content.split('\n').filter((line) => line.trim());
-
+    // Skip header
+    let offset = PERIOD_FILE_HEADER_SIZE;
     const candles: FootprintCandle[] = [];
 
-    for (const line of lines) {
-      try {
-        const data = JSON.parse(line) as CandleData;
-        const candle = this.candleDataToFootprintCandle(data);
-        candles.push(candle);
-      } catch {
-        // Skip invalid lines
-        continue;
+    // Detect format: Check first bytes after header
+    if (buffer.length > offset + 4) {
+      const firstByte = buffer[offset];
+
+      if (firstByte === 0x7b) {
+        // Legacy JSON format (starts with '{')
+        const content = buffer.subarray(offset).toString('utf-8');
+        const lines = content.split('\n').filter((line) => line.trim());
+
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line) as CandleData;
+            const candle = this.candleDataToFootprintCandle(data);
+            candles.push(candle);
+          } catch {
+            // Skip invalid lines
+            continue;
+          }
+        }
+      } else if (this.serializer) {
+        // Length-prefixed binary format (FTCO or FTCF)
+        while (offset + 4 <= buffer.length) {
+          const recordLength = buffer.readUInt32LE(offset);
+          offset += 4;
+
+          if (offset + recordLength > buffer.length) {
+            // Truncated record, stop reading
+            break;
+          }
+
+          const recordBuffer = buffer.subarray(offset, offset + recordLength);
+          offset += recordLength;
+
+          try {
+            // Detect format by magic bytes
+            const magic = recordBuffer.subarray(0, 4).toString('ascii');
+
+            if (magic === 'FTCO') {
+              // FTCO format (optimized CandleOnly)
+              const result =
+                this.serializer.deserializeCandleOnly(recordBuffer);
+              const candle = this.candleOnlyDataToFootprintCandle(result.data);
+              candles.push(candle);
+            } else if (magic === 'FTCF') {
+              // FTCF format (legacy full FootprintCandle)
+              const result = this.serializer.deserialize(recordBuffer);
+              candles.push(result.candle);
+            } else {
+              console.error('Unknown magic bytes:', magic);
+              continue;
+            }
+          } catch (error) {
+            // Skip invalid records
+            console.error('Failed to deserialize record:', error);
+            continue;
+          }
+        }
       }
     }
 
@@ -579,7 +786,47 @@ export class HierarchicalFileStorage implements CandleStoragePort {
   }
 
   /**
+   * Convert CandleOnlyData to FootprintCandle
+   */
+  private candleOnlyDataToFootprintCandle(
+    data: CandleOnlyData
+  ): FootprintCandle {
+    return {
+      e: 'CANDLESTICK',
+      tz: 'UTC',
+      ex: '',
+      a: '',
+      s: data.s,
+      i: data.i,
+      vi: this.getIntervalSeconds(data.i),
+      t: data.t,
+      ct: data.ct,
+      o: data.o,
+      h: data.h,
+      l: data.l,
+      c: data.c,
+      v: data.v,
+      bv: data.bv,
+      sv: data.sv,
+      q: data.q,
+      bq: data.bq,
+      sq: data.sq,
+      n: data.n,
+      f: 0,
+      ls: 0,
+      d: data.d,
+      dMax: data.dMax,
+      dMin: data.dMin,
+      tv: 0,
+      bm: 1,
+      aggs: [],
+      x: true,
+    } as unknown as FootprintCandle;
+  }
+
+  /**
    * Read footprints from a period file
+   * Supports FTFO (optimized), FTCF (legacy), and JSON formats
    */
   private async readFootprintsFromPeriod(
     basePath: string,
@@ -592,19 +839,80 @@ export class HierarchicalFileStorage implements CandleStoragePort {
       return [];
     }
 
-    // Skip header and parse JSON lines
-    const content = buffer.subarray(PERIOD_FILE_HEADER_SIZE).toString('utf-8');
-    const lines = content.split('\n').filter((line) => line.trim());
-
+    // Skip header
+    let offset = PERIOD_FILE_HEADER_SIZE;
     const footprints: FootprintData[] = [];
 
-    for (const line of lines) {
-      try {
-        const data = JSON.parse(line) as FootprintData;
-        footprints.push(data);
-      } catch {
-        // Skip invalid lines
-        continue;
+    // Detect format
+    if (buffer.length > offset + 4) {
+      const firstByte = buffer[offset];
+
+      if (firstByte === 0x7b) {
+        // Legacy JSON format
+        const content = buffer.subarray(offset).toString('utf-8');
+        const lines = content.split('\n').filter((line) => line.trim());
+
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line) as FootprintData;
+            footprints.push(data);
+          } catch {
+            // Skip invalid lines
+            continue;
+          }
+        }
+      } else if (this.serializer) {
+        // Length-prefixed binary format (FTFO or FTCF)
+        while (offset + 4 <= buffer.length) {
+          const recordLength = buffer.readUInt32LE(offset);
+          offset += 4;
+
+          if (offset + recordLength > buffer.length) {
+            break;
+          }
+
+          const recordBuffer = buffer.subarray(offset, offset + recordLength);
+          offset += recordLength;
+
+          try {
+            // Detect format by magic bytes
+            const magic = recordBuffer.subarray(0, 4).toString('ascii');
+
+            if (magic === 'FTFO') {
+              // FTFO format (optimized FootprintOnly)
+              const result =
+                this.serializer.deserializeFootprintOnly(recordBuffer);
+              footprints.push(result.data);
+            } else if (magic === 'FTCF') {
+              // FTCF format (legacy full FootprintCandle)
+              const result = this.serializer.deserialize(recordBuffer);
+              const candle = result.candle;
+              footprints.push({
+                t: candle.t,
+                ct: candle.ct,
+                s: candle.s,
+                i: candle.i,
+                n: candle.n,
+                tv: candle.tv,
+                bm: candle.bm,
+                aggs: candle.aggs.map((agg) => ({
+                  tp: agg.tp,
+                  v: agg.v,
+                  bv: agg.bv,
+                  sv: agg.sv,
+                  bq: agg.bq ?? 0,
+                  sq: agg.sq ?? 0,
+                })),
+              });
+            } else {
+              console.error('Unknown magic bytes:', magic);
+              continue;
+            }
+          } catch (error) {
+            console.error('Failed to deserialize footprint record:', error);
+            continue;
+          }
+        }
       }
     }
 
@@ -648,6 +956,7 @@ export class HierarchicalFileStorage implements CandleStoragePort {
       i: candle.i,
       n: candle.n,
       tv: candle.tv,
+      bm: candle.bm,
       aggs: candle.aggs.map((agg) => ({
         tp: agg.tp,
         v: agg.v,

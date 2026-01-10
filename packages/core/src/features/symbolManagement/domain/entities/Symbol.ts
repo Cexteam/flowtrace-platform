@@ -24,6 +24,12 @@ export interface SymbolConfig {
   maxQuantity: number;
   pricePrecision: number;
   quantityPrecision: number;
+  /**
+   * Bin multiplier for footprint aggregation.
+   * effective_bin_size = tickValue × binMultiplier
+   * null/undefined/0 = auto-calculate based on price
+   */
+  binMultiplier?: number | null;
 }
 
 export class Symbol {
@@ -132,6 +138,14 @@ export class Symbol {
    */
   updateProcessingStatus(isProcessing: boolean): void {
     this.isProcessing = isProcessing;
+    this.updatedAt = new Date();
+  }
+
+  /**
+   * Domain logic: Update symbol configuration
+   */
+  updateConfig(config: Partial<SymbolConfig>): void {
+    this.config = { ...this.config, ...config };
     this.updatedAt = new Date();
   }
 

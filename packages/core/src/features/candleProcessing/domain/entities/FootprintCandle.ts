@@ -11,6 +11,10 @@ import { Timeframe } from '../value-objects/Timeframe.js';
 import { TradeData, RawTrade, isBuyTrade } from '../value-objects/TradeData.js';
 import { Aggs, mergeAggsArrays } from './PriceBin.js';
 import { CalAggsFootprint } from '../services/FootprintCalculator.js';
+import { checkMaxBinsWarningRateLimited } from '../services/BinSizeCalculator.js';
+import { createLogger } from '../../../../shared/lib/logger/logger.js';
+
+const logger = createLogger('FootprintCandle');
 
 /**
  * FootprintCandle DTO for serialization
@@ -40,6 +44,8 @@ export interface FootprintCandleDTO {
   dMax: number; // Max delta
   dMin: number; // Min delta
   tv: number; // Tick value
+  bm?: number; // Bin multiplier (NEW: for footprint aggregation)
+  ebs?: number; // Effective bin size (NEW: tv × bm)
   aggs: Aggs[]; // Price bins
   f: number; // First trade ID
   ls: number; // Last trade ID
@@ -90,6 +96,7 @@ export class FootprintCandle {
 
   // Footprint data
   public tv: number; // Tick value for binning
+  public bm: number; // Bin multiplier (NEW: for footprint aggregation)
   public aggs: Aggs[] = []; // Price bins
 
   // Completion status
@@ -99,13 +106,23 @@ export class FootprintCandle {
     symbol: string,
     timeframe: Timeframe,
     tickValue: number,
-    exchange: string = ''
+    exchange: string = '',
+    binMultiplier: number = 1
   ) {
     this.s = symbol;
     this.i = timeframe.name;
     this.vi = timeframe.seconds;
     this.tv = tickValue;
+    this.bm = binMultiplier;
     this.ex = exchange;
+  }
+
+  /**
+   * Get effective bin size for footprint calculation
+   * effectiveBinSize = tickValue × binMultiplier
+   */
+  get effectiveBinSize(): number {
+    return this.tv * this.bm;
   }
 
   /**
@@ -127,10 +144,11 @@ export class FootprintCandle {
    * - dMin = min(dMin, d)
    * - n++
    * - ls = trade id
-   * - aggs = CalAggsFootprint(aggs, trade, tickValue)
+   * - aggs = CalAggsFootprint(aggs, trade, effectiveBinSize)
    *
+   * @param trade - Trade data to apply
    */
-  applyTrade(trade: TradeData, tickValue: number): void {
+  applyTrade(trade: TradeData): void {
     const price = trade.price;
     const quantity = trade.quantity;
     const quoteVolume = price * quantity;
@@ -176,7 +194,8 @@ export class FootprintCandle {
     this.dMax = delta > this.dMax ? delta : this.dMax;
     this.dMin = delta < this.dMin ? delta : this.dMin;
 
-    // Update footprint bins using CalAggsFootprint - exact match to original
+    // Update footprint bins using CalAggsFootprint
+    // Use effectiveBinSize (tickValue × binMultiplier) for nice bin sizes
     const rawTrade: RawTrade = {
       p: price.toString(),
       q: quantity.toString(),
@@ -185,7 +204,24 @@ export class FootprintCandle {
       s: trade.symbol,
       t: trade.tradeId,
     };
-    this.aggs = CalAggsFootprint(this.aggs, rawTrade, tickValue);
+    this.aggs = CalAggsFootprint(this.aggs, rawTrade, this.effectiveBinSize);
+
+    // Check for excessive bins and log warning (rate-limited to prevent log spam)
+    const warning = checkMaxBinsWarningRateLimited(this.aggs.length, this.s);
+    if (warning) {
+      logger.warn(`${warning}`, {
+        symbol: this.s,
+        timeframe: this.i,
+        binsCount: this.aggs.length,
+        candleStartTime: this.t,
+        tradeCount: this.n,
+        priceHigh: this.h,
+        priceLow: this.l,
+        priceRange: this.h - this.l,
+        effectiveBinSize: this.effectiveBinSize,
+        expectedBins: Math.ceil((this.h - this.l) / this.effectiveBinSize),
+      });
+    }
   }
 
   /**
@@ -232,32 +268,6 @@ export class FootprintCandle {
   }
 
   /**
-   * Initialize a new candle at a specific time
-   */
-  initializeNewCandle(startTime: number, price: number): void {
-    this.t = startTime;
-    this.o = price;
-    this.h = price;
-    this.l = price;
-    this.c = price;
-    this.v = 0;
-    this.bv = 0;
-    this.sv = 0;
-    this.q = 0;
-    this.bq = 0;
-    this.sq = 0;
-    this.n = 0;
-    this.d = 0;
-    this.dMax = 0;
-    this.dMin = 0;
-    this.f = 0;
-    this.ls = 0;
-    this.x = false;
-    this.ct = 0;
-    this.aggs = [];
-  }
-
-  /**
    * Clone this candle
    * Uses lodash cloneDeep for deep copying to match production logic
    *
@@ -267,7 +277,8 @@ export class FootprintCandle {
       this.s,
       new Timeframe(this.i),
       this.tv,
-      this.ex
+      this.ex,
+      this.bm
     );
     cloned.e = this.e;
     cloned.tz = this.tz;
@@ -324,6 +335,8 @@ export class FootprintCandle {
       dMax: this.dMax,
       dMin: this.dMin,
       tv: this.tv,
+      bm: this.bm,
+      ebs: this.effectiveBinSize,
       aggs: this.aggs,
       f: this.f,
       ls: this.ls,
@@ -339,7 +352,8 @@ export class FootprintCandle {
       dto.s,
       new Timeframe(dto.i),
       dto.tv,
-      dto.ex
+      dto.ex,
+      dto.bm ?? 1 // Default to 1 for backward compatibility
     );
     candle.e = dto.e;
     candle.tz = dto.tz;
@@ -374,8 +388,15 @@ export class FootprintCandle {
     symbol: string,
     timeframe: Timeframe,
     tickValue: number,
-    exchange: string = ''
+    exchange: string = '',
+    binMultiplier: number = 1
   ): FootprintCandle {
-    return new FootprintCandle(symbol, timeframe, tickValue, exchange);
+    return new FootprintCandle(
+      symbol,
+      timeframe,
+      tickValue,
+      exchange,
+      binMultiplier
+    );
   }
 }
